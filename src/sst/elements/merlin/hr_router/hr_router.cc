@@ -80,11 +80,13 @@ static std::string getLogicalGroupParam(const Params& params, Topology* topo, in
     if ( value == "" ) {
         // Look for default value
         value = params.find<std::string>(param, default_val);
+
         if ( value == "" ) {
             // Abort
             merlin_abort.fatal(CALL_INFO, -1, "hr_router requires %s to be specified\n", param.c_str());
         }
     }
+
     return value;
 }
 
@@ -124,7 +126,6 @@ hr_router::hr_router(ComponentId_t cid, Params& params) :
     num_vcs(-1),
     output(Simulation::getSimulation()->getSimulationOutput())
 {
-
     // Get the options for the router
     id = params.find<int>("id",-1);
     if ( id == -1 ) {
@@ -148,6 +149,8 @@ hr_router::hr_router(ComponentId_t cid, Params& params) :
     if ( !topo ) {
         merlin_abort.fatal(CALL_INFO_LONG, 1, "hr_router requires topology to be specified in input file\n");
     }
+
+    topo->set_parent(this);
 
     topo->getVCsPerVN(vcs_per_vn);
     num_vcs = 0;
@@ -190,6 +193,7 @@ hr_router::hr_router(ComponentId_t cid, Params& params) :
 
     // Link BW default.  Can be overwritten using logical groups
     std::string link_bw_s = params.find<std::string>("link_bw");
+
     UnitAlgebra link_bw(link_bw_s);
 
     if ( link_bw.hasUnits("B/s") ) {
@@ -211,7 +215,6 @@ hr_router::hr_router(ComponentId_t cid, Params& params) :
 
     UnitAlgebra xbar_clock;
     xbar_clock = xbar_bw_ua / flit_size;
-
 
     std::string input_latency = params.find<std::string>("input_latency", "0ns");
     std::string output_latency = params.find<std::string>("output_latency", "0ns");
@@ -310,6 +313,21 @@ hr_router::hr_router(ComponentId_t cid, Params& params) :
     }
 
     init_vcs();
+
+    // if(id == 0){
+    //     output.output("\n-------hr_router---------\n");
+    //     output.output("num_vns %d\n", num_vns);
+    //     output.output("link_bw %s\n", link_bw.toStringBestSI().c_str());
+    //     output.output("link_bw:host %s\n", params.find<std::string>("link_bw:host").c_str());
+    //     output.output("xbar_bw %s\n", xbar_bw_ua.toStringBestSI().c_str());
+    //     output.output("flit_size %s\n", flit_size.toStringBestSI().c_str());
+    //     output.output("input_latency %s\n", input_latency.c_str());
+    //     output.output("output_latency %s\n", output_latency.c_str());
+    //     output.output("input_buf_size %s\n", input_buf_size.c_str());
+    //     output.output("output_buf_size %s\n", output_buf_size.c_str());
+    //     output.output("num_ports %d, num_vcs/port %d, num_vns %d\n", num_ports, num_vcs, num_vns);
+    //     output.output("-----------------------\n");
+    // }
 }
 
 
@@ -376,7 +394,7 @@ hr_router::printStatus(Output& out)
 
 bool
 hr_router::clock_handler(Cycle_t cycle)
-{
+{   
     // If there are no events in the input queues, then we can remove
     // ourselves from the clock queue, as long as the arbitration unit
     // says it's okay.
@@ -565,22 +583,49 @@ hr_router::init_vcs()
     vc_heads = new internal_router_event*[num_ports*num_vcs];
     xbar_in_credits = new int[num_ports*num_vcs];
     output_queue_lengths = new int[num_ports*num_vcs];
+    output_credits = new int[num_ports*num_vcs];
+    output_used_credits = new int[num_ports*num_vcs];
+
     for ( int i = 0; i < num_ports*num_vcs; i++ ) {
         vc_heads[i] = NULL;
         xbar_in_credits[i] = 0;
         output_queue_lengths[i] = 0;
+        output_credits[i] = 0;
+        output_used_credits[i] = 0;
     }
 
     for ( int i = 0; i < num_ports; i++ ) {
-        ports[i]->initVCs(num_vns,vcs_per_vn.data(),&vc_heads[i*num_vcs],&xbar_in_credits[i*num_vcs],&output_queue_lengths[i*num_vcs]);
+        ports[i]->initVCs(num_vns,vcs_per_vn.data(),&vc_heads[i*num_vcs],&xbar_in_credits[i*num_vcs],&output_queue_lengths[i*num_vcs],&output_credits[i*num_vcs],&output_used_credits[i*num_vcs]);
     }
 
     topo->setOutputBufferCreditArray(xbar_in_credits, num_vcs);
     topo->setOutputQueueLengthsArray(output_queue_lengths, num_vcs);
 
+    topo->setOutput2NbrCreditArray(output_credits, num_vcs);
+    topo->setOutputUsedCreditArray(output_used_credits, num_vcs);
+
     // Now that we have the number of VCs we can finish initializing
     // arbitration logic
-    arb->setPorts(num_ports,num_vcs);
+    arb->setPorts(num_ports, num_vcs);
+}
 
+//For Dragonfly
+void
+hr_router::bcast_qvalue_thld(uint32_t target_row_intable, int64_t new_est, std::vector<int> bcast_ports, int vn)
+{
+    // printf("HR_R %d, Bcast new est %ld for G%u\n", id, new_est, dest_group);
+    for ( int i : bcast_ports ) {
+        ports[i]->link_send_qevent(target_row_intable, new_est, vn);
+    }
+}
 
+void
+hr_router::bcast_qvalue_perid(std::vector<int> bcast_ports, uint32_t num_host, std::vector<int64_t> qBcastTable, std::vector<int64_t> tFromNbrTable)
+{
+    // if(id == 0){
+    //     printf("HR_RTR %d, now %lu\n",id, getCurrentSimTimeNano());
+    // } 
+    for ( int i : bcast_ports ) {
+        ports[i]->link_send_bcastEvent(tFromNbrTable[i-num_host], qBcastTable);
+    }
 }

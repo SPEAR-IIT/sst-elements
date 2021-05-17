@@ -23,9 +23,15 @@ class topoDragonFly(Topology):
 
     def __init__(self):
         Topology.__init__(self)
-        self._declareClassVariables(["link_latency","host_link_latency","global_link_map"])
+        self._declareClassVariables([
+            "link_lat_host", "link_lat_local", "link_lat_global",
+            "global_link_map"])
         self._declareParams("main",["hosts_per_router","routers_per_group","intergroup_links","num_groups",
-                                    "algorithm","adaptive_threshold","global_routes"])
+                                    "algorithm","adaptive_threshold","global_routes",
+                                    "link_lat_local", "link_lat_global",
+                                    "learning_rate", "learning_rate2", "save_qtable", "load_qtable", "pathToQtableFile", "max_hops", "epsilon", "qtable_bcast", "qbcastThsld", "qbcastPerid", "qtable_row_type", "src_group_q", "src_mid_group_q", "save_qtable_time", "q_threshold1", "q_threshold2", 
+                                    "perid_func"])
+        
         self.global_routes = "absolute"
         self._subscribeToPlatformParamSet("topology")
 
@@ -62,8 +68,9 @@ class topoDragonFly(Topology):
     
         
     def build(self, endpoint):
-        if self.host_link_latency is None:
-            self.host_link_latency = self.link_latency
+        # host, local, global latency are explicitly defined
+        # if self.host_link_latency is None:
+        #     self.host_link_latency = self.link_latency
 
         num_peers = self.hosts_per_router * self.routers_per_group * self.num_groups
 
@@ -120,6 +127,7 @@ class topoDragonFly(Topology):
             # Look into global link map to get the dest group and link
             # number to that group
             raw_dest = self.global_link_map[r * igpr + p];
+
             if raw_dest == -1:
                 return None
 
@@ -143,6 +151,7 @@ class topoDragonFly(Topology):
             dest = max(dest_grp, g)
 
             #getLink("link:g%dg%dr%d"%(g, src, dst)), "port%d"%port, self.params["link_lat"])
+
             return getLink("%sglobal_link:g%dg%dr%d"%(self._prefix,src,dest,link_num))
 
         #########################
@@ -175,7 +184,7 @@ class topoDragonFly(Topology):
                     if nic:
                         link = sst.Link("link:g%dr%dh%d"%(g, r, p))
                         #network_interface.build(nic,slot,0,link,self.host_link_latency)
-                        link.connect( (nic, port_name, self.host_link_latency), (rtr, "port%d"%port, self.host_link_latency) )
+                        link.connect( (nic, port_name, self.link_lat_host), (rtr, "port%d"%port, self.link_lat_host) )
                         #rtr.addLink(link,"port%d"%port,self.host_link_latency)
                     nic_num = nic_num + 1
                     port = port + 1
@@ -184,13 +193,15 @@ class topoDragonFly(Topology):
                     if p != r:
                         src = min(p,r)
                         dst = max(p,r)
-                        rtr.addLink(getLink("link:g%dr%dr%d"%(g, src, dst)), "port%d"%port, self.link_latency)
+                        rtr.addLink(getLink("link:g%dr%dr%d"%(g, src, dst)), "port%d"%port, self.link_lat_local)
+
                         port = port + 1
 
                 for p in range(igpr):
                     link = getGlobalLink(g,r,p)
                     if link is not None:
-                        rtr.addLink(link,"port%d"%port, self.link_latency)
+                        rtr.addLink(link,"port%d"%port, self.link_lat_global)
+
                     port = port +1
 
                 router_num = router_num + 1

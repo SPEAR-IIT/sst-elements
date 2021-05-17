@@ -27,6 +27,7 @@ namespace SST {
 using namespace Interfaces;
 
 namespace Merlin {
+    
 
 LinkControl::LinkControl(ComponentId_t cid, Params &params, int vns) :
     SST::Interfaces::SimpleNetwork(cid),
@@ -42,6 +43,7 @@ LinkControl::LinkControl(ComponentId_t cid, Params &params, int vns) :
     network_initialized(false),
     output(Simulation::getSimulation()->getSimulationOutput())
 {
+
     // Get the link bandwidth
     link_bw = params.find<UnitAlgebra>("link_bw");
     if ( !link_bw.hasUnits("B/s") && !link_bw.hasUnits("b/s") ) {
@@ -106,7 +108,7 @@ LinkControl::LinkControl(ComponentId_t cid, Params &params, int vns) :
 
     // See if we need to set up a nid map
     bool found = false;
-    int job_id = params.find<int>("job_id",-1,found);
+    job_id = params.find<int>("job_id",0,found);
     if ( found ) {
         if ( params.find<bool>("use_nid_remap",false) ) {
             std::string nid_map_name = std::string("job_") + std::to_string(job_id) + "_nid_map";
@@ -116,7 +118,7 @@ LinkControl::LinkControl(ComponentId_t cid, Params &params, int vns) :
                 merlin_abort.fatal(CALL_INFO,1,"LinkControl: job_size must be set\n");
             }
             logical_nid = params.find<nid_t>("logical_nid",-1);
-            if ( job_size == -1 ) {
+            if  ( logical_nid == -1 ) {
                 merlin_abort.fatal(CALL_INFO,1,"LinkControl: logical_nid must be set\n");
             }
             nid_map_shm = Simulation::getSharedRegionManager()->
@@ -131,7 +133,7 @@ LinkControl::LinkControl(ComponentId_t cid, Params &params, int vns) :
                 merlin_abort.fatal(CALL_INFO,1,"LinkControl: job_size must be set if nid_map_name is set\n");
             }
             logical_nid = params.find<nid_t>("logical_nid",-1);
-            if ( job_size == -1 ) {
+            if ( logical_nid == -1 ) {
                 merlin_abort.fatal(CALL_INFO,1,"LinkControl: logical_nid must be set if nid_map_name is set\n");
             }
             nid_map_shm = Simulation::getSharedRegionManager()->
@@ -139,13 +141,29 @@ LinkControl::LinkControl(ComponentId_t cid, Params &params, int vns) :
         }
     }
 
+    // create a directory to store statistic files
+    mkdir("./link_control_data/" ,0755);
+    
+    outfile = "./link_control_data/linkcontrol_job" + std::to_string(job_id) + "_" + std::to_string(logical_nid)+ "_";
 
+    FILE *file = fopen(outfile.c_str(), "w");
+    fprintf(file, "linkcontrol: jobid, msgid, src, dest, hop num, lat, send time, recv time, adp, val pos, midgroup, route_path\n");
+    fclose(file);
     
     // Register statistics
     packet_latency = registerStatistic<uint64_t>("packet_latency");
     send_bit_count = registerStatistic<uint64_t>("send_bit_count");
     output_port_stalls = registerStatistic<uint64_t>("output_port_stalls");
     idle_time = registerStatistic<uint64_t>("idle_time");
+
+    packet_hops = registerStatistic<uint64_t>("packet_hops");
+    packet_adp = registerStatistic<uint64_t>("packet_adp");
+
+    // if(logical_nid == 0) {
+    //     output.output("\n--------  NIC --------------\n");
+    //     output.output("input buffer size %s\n", inbuf_size.toStringBestSI().c_str());
+    //     output.output("output buffer size %s\n", outbuf_size.toStringBestSI().c_str());
+    // }
 }
 
 LinkControl::~LinkControl()
@@ -158,7 +176,6 @@ LinkControl::~LinkControl()
 
     // Delete shared region manager for nid map if we're using one
     if ( nid_map_shm ) delete nid_map_shm;
-
 }
 
 void LinkControl::setup()
@@ -275,7 +292,6 @@ void LinkControl::init(unsigned int phase)
             router_return_credits[i] = 0;
             router_credits[i] = 0;
         }
-
         
         int* vn_count = new int[total_vns];
         for ( int i = 0; i < total_vns; ++i ) vn_count[i] = 0;
@@ -427,12 +443,12 @@ bool LinkControl::send(SimpleNetwork::Request* req, int vn) {
     int real_vn = out_handle.vn;
 
     // Create a router event using id and original vn
-    RtrEvent* ev = new RtrEvent(req,id,real_vn);
+    // RtrEvent* ev = new RtrEvent(req,id,real_vn);
+    RtrEvent* ev = new RtrEvent(req,id,real_vn, job_id);
     // Fill in the number of flits
     ev->computeSizeInFlits(flit_size);
     int flits = ev->getSizeInFlits();
     
-    // Check to see if there are enough credits to send
     if ( out_handle.credits < flits ) return false;
 
     // Update the credits
@@ -457,10 +473,11 @@ bool LinkControl::send(SimpleNetwork::Request* req, int vn) {
 // Returns true if there is space in the output buffer and false
 // otherwise.
 bool LinkControl::spaceToSend(int vn, int bits) {
-    if ( vn_remap_out[vn]->credits * flit_size < bits) return false;
+    if ( vn_remap_out[vn]->credits * flit_size < bits){
+        return false;
+    } 
     return true;
 }
-
 
 // Returns nullptr if no event in input_buf[vn]. Otherwise, returns
 // the next event.
@@ -549,6 +566,16 @@ void LinkControl::handle_input(Event* ev)
     }
     else {
         RtrEvent* event = static_cast<RtrEvent*>(ev);
+        assert(job_id == event->getJobId());
+        if(id != event->getDest()){
+            printf("linkcontrol: id %ld rev msg: [%d, %ld => %ld]\n", id, event->getTraceID(), event->getTrustedSrc(), event->getDest() );
+            for(int rtr : event->route_path){
+                printf("%d ", rtr );
+            }
+            printf("\n");
+        }
+        assert(id == event->getDest());
+    
         // Simply put the event into the right virtual network queue
         // int orig_vn = event->getOriginalVN();
         int vn = event->getLogicalVN();
@@ -568,8 +595,38 @@ void LinkControl::handle_input(Event* ev)
                           event->getRouteVN(),
                           event->getTrustedSrc());
         }
-        SimTime_t lat = getCurrentSimTimeNano() - event->getInjectionTime();
+
+        SimTime_t tmp_cur = getCurrentSimTimeNano();
+        SimTime_t lat = tmp_cur - event->getInjectionTime();
         packet_latency->addData(lat);
+
+        char buffer[300];
+        int s_len = sprintf(buffer, "%d,%d,%" PRId64 ",%" PRId64 ",%d,%" PRIu64 ",%" PRIu64 ",%" PRId64 ",|,",
+            job_id, event->getTraceID(), event->getTrustedSrc(), event->getDest(),
+            event->getNumHops(), lat, event->getInjectionTime(), tmp_cur);
+        //, event->getAdpRouted(), event->val_route_pos, event->midgroup %d,%d,%d,
+
+        assert(event->getNumHops() + 1 == event->route_path.size());
+
+        std::string buff_str(buffer);
+
+        // record msg full path
+        // for(int rtr : event->route_path){
+        //     buff_str += (std::to_string(rtr) + ",");
+        // }
+
+        buff_str += "\n";
+        const char *buf_2write = buff_str.c_str();
+
+        FILE *file = fopen(outfile.c_str(), "a");
+        fprintf(file, buf_2write);
+        fclose(file);
+
+        uint64_t hops = (uint64_t)event->getNumHops();
+        packet_hops->addData(hops);
+        if(event->getAdpRouted())
+            packet_adp->addData(1);
+
         if ( receiveFunctor != nullptr ) {
             bool keep = (*receiveFunctor)(vn);
             if ( !keep) receiveFunctor = nullptr;
@@ -588,6 +645,7 @@ void LinkControl::handle_output(Event* ev)
 
     // We do a round robin scheduling.  If the current vn has no
     // data, find one that does.
+
     int vn_to_send = -1;
     bool found = false;
     RtrEvent* send_event = nullptr;
@@ -596,8 +654,10 @@ void LinkControl::handle_output(Event* ev)
         if ( output_queues[i].queue.empty() ) continue;
         have_packets = true;
         send_event = output_queues[i].queue.front();
+
         // Check to see if the needed VN has enough space
         if ( router_credits[output_queues[i].vn] < send_event->getSizeInFlits() ) continue;
+        
         vn_to_send = i;
         output_queues[i].queue.pop();
         found = true;
@@ -631,8 +691,8 @@ void LinkControl::handle_output(Event* ev)
         if ( curr_out_vn == used_vns ) curr_out_vn = 0;
 
         // Add in inject time so we can track latencies
-        send_event->setInjectionTime(getCurrentSimTimeNano());
-        
+        // send_event->setInjectionTime(getCurrentSimTimeNano());
+
         // Subtract credits
         // rtr_credits[vn_to_send] -= size;
         router_credits[output_queues[vn_to_send].vn] -= size;
@@ -643,7 +703,7 @@ void LinkControl::handle_output(Event* ev)
         }
 
         rtr_link->send(send_event);
-        
+
         if ( send_event->getTraceType() == SimpleNetwork::Request::FULL ) {
             output.output("TRACE(%d): %" PRIu64 " ns: Sent an event to router from LinkControl"
                           " in NIC: %s on VN %d to dest %" PRIu64 ".\n",

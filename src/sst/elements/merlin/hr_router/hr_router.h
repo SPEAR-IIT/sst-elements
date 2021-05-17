@@ -108,6 +108,9 @@ private:
     int* xbar_in_credits;
     int* output_queue_lengths;
 
+    int* output_credits;
+    int* output_used_credits;
+
 #if VERIFY_DECLOCKING
     bool clocking;
 #endif
@@ -155,6 +158,10 @@ public:
     void dumpState(std::ostream& stream);
     void printStatus(Output& out);
 
+    void bcast_qvalue_thld(uint32_t dest_group, int64_t new_est, std::vector<int> bcast_ports, int vn);
+    PortInterface* get_rtr_port(int id) {return ports[id];}
+
+    void bcast_qvalue_perid(std::vector<int> bcast_ports, uint32_t num_host, std::vector<int64_t> qBcastTable, std::vector<int64_t> tFromNbrTable);
 };
 
 }

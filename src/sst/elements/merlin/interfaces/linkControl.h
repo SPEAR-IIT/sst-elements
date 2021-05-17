@@ -30,6 +30,8 @@
 
 #include <queue>
 
+#include <sys/stat.h>
+
 namespace SST {
 
 class Component;
@@ -75,6 +77,9 @@ public:
         { "send_bit_count",     "Count number of bits sent on link", "bits", 1},
         { "output_port_stalls", "Time output port is stalled (in units of core timebase)", "time in stalls", 1},
         { "idle_time",          "Number of (in unites of core timebas) that port was idle", "time spent idle", 1},
+        { "packet_hops",        "Number of link hops each packet travels", "hops", 1},
+        { "packet_adp",     "Number of packets adaptively routed", "num adaptive", 1},
+
     )
 
     SST_ELI_DOCUMENT_PORTS(
@@ -94,7 +99,6 @@ private:
             credits(0)
             {}
     };
-
 
     // Link to router
     Link* rtr_link;
@@ -144,6 +148,7 @@ private:
     network_queue_t* input_queues;
 
 
+    int job_id;
     nid_t id;
     nid_t logical_nid;
     SharedRegion* nid_map_shm;
@@ -182,7 +187,17 @@ private:
     Statistic<uint64_t>* output_port_stalls;
     Statistic<uint64_t>* idle_time;
 
+    Statistic<uint64_t>* packet_hops;
+    Statistic<uint64_t>* packet_adp;
+
     Output& output;
+
+    Output* out2file;
+    std::string outfile;    //record each msg lat
+
+    std::string outfile2;    //record each msg when sent
+
+    FILE * iofile_handler; 
 
 public:
     LinkControl(ComponentId_t cid, Params &params, int vns);

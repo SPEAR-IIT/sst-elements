@@ -49,7 +49,7 @@ PortControl::sendTopologyEvent(TopologyEvent* ev)
 
 void
 PortControl::send(internal_router_event* ev, int vc)
-{
+{   
 #if TRACK
     if ( rtr_id == TRACK_ID && port_number == TRACK_PORT ) {
         // std::cout << "send start:" << std::endl;
@@ -121,6 +121,12 @@ PortControl::recv(int vc)
 	// into account.
 	port_link->send(1,new credit_event(vc_return,port_ret_credits[vc_return])); 
 	port_ret_credits[vc_return] = 0;
+
+    // update q table, only useful for dragonfly topology so far
+    if (!topo->isHostPort(port_number) ){
+        qtable_event* ev_qtable = topo->create_qtable_event(event, port_number, false);
+        if(ev_qtable) port_link->send(1, ev_qtable); 
+    }
     
 #if TRACK
     if ( rtr_id == TRACK_ID && port_number == TRACK_PORT ) {
@@ -325,11 +331,22 @@ PortControl::PortControl(ComponentId_t cid, Params& params,  Router* rif, int rt
             shared_region->publish();
         }
     }
+
+    // if(rtr_id == 0 && port_number == 0){
+    //     output.output("\n-------port_control---------\n");
+    //     output.output("oql_track_port %d\n", oql_track_port);
+    //     output.output("oql_track_remote %d\n", oql_track_remote);
+    // }
+    // if(rtr_id == 0 ) {
+    //     output.output("port %d (%s, %s), ", 
+    //             port_number, 
+    //             input_buf_size.toStringBestSI().c_str(),
+    //             output_buf_size.toStringBestSI().c_str());
+    // }
 }
 
-
 void
-PortControl::initVCs(int vns, int* vcs_per_vn, internal_router_event** vc_heads_in, int* xbar_in_credits_in, int* output_queue_lengths_in)
+PortControl::initVCs(int vns, int* vcs_per_vn, internal_router_event** vc_heads_in, int* xbar_in_credits_in, int* output_queue_lengths_in, int* output_credits_in, int* output_used_credits_in)
 {
     vc_heads = vc_heads_in;
     num_vns = vns;
@@ -350,7 +367,10 @@ PortControl::initVCs(int vns, int* vcs_per_vn, internal_router_event** vc_heads_
     }
     xbar_in_credits = xbar_in_credits_in;
     output_queue_lengths = output_queue_lengths_in;
-    
+
+    port_out_credits = output_credits_in;
+    output_used_credits = output_used_credits_in;
+
     // Input and output buffers
     input_buf = new port_queue_t[num_vcs];
     output_buf = new port_queue_t[num_vcs];
@@ -367,7 +387,8 @@ PortControl::initVCs(int vns, int* vcs_per_vn, internal_router_event** vc_heads_
     // Initialize credit arrays
     // xbar_in_credits = new int[vcs];
     port_ret_credits = new int[num_vcs];
-    port_out_credits = new int[num_vcs];
+    // port_out_credits = new int[num_vcs];
+
     
     // Figure out how large the buffers are in flits
 
@@ -412,7 +433,7 @@ PortControl::~PortControl() {
     if ( input_buf_count != NULL ) delete [] input_buf_count;
     if ( output_buf_count != NULL ) delete [] output_buf_count;
     if ( port_ret_credits != NULL ) delete [] port_ret_credits;
-    if ( port_out_credits != NULL ) delete [] port_out_credits;
+    // if ( port_out_credits != NULL ) delete [] port_out_credits;
     for ( unsigned int i = 0; i < network_inspectors.size(); i++ ) {
         delete network_inspectors[i];
     }
@@ -756,6 +777,7 @@ PortControl::dumpQueueState(port_queue_t& q, Output& out) {
 void
 PortControl::handle_input_n2r(Event* ev)
 {
+
 	// Check to see if this is a credit or data packet
 	// credit_event* ce = dynamic_cast<credit_event*>(ev);
 	// if ( ce != NULL ) {
@@ -766,6 +788,10 @@ PortControl::handle_input_n2r(Event* ev)
     {
 	    credit_event* ce = static_cast<credit_event*>(ev);
 	    port_out_credits[ce->vc] += ce->credits;
+
+        output_used_credits[ce->vc] -= ce->credits;
+
+        // set specifically by the rting
 
         if ( oql_track_remote ) {
             if ( oql_track_port ) {
@@ -793,10 +819,20 @@ PortControl::handle_input_n2r(Event* ev)
 	    }
 	}
     break;
+    case BaseRtrEvent::QTABLE:
+    {
+        merlin_abort.fatal(CALL_INFO_LONG, 1, "PortControl::handle_input_n2r, rtr %d recived a qtable event from an endpoint!!!\n", rtr_id);
+    }
 	case BaseRtrEvent::PACKET:
 	{
+
 	    RtrEvent* event = static_cast<RtrEvent*>(ev);
 	    // Simply put the event into the right virtual network queue
+
+        // count link hop
+        assert(event->getNumHops() == 0);
+        assert(event->route_path.size() == 0);
+        event->route_path.push_back(rtr_id);
         
 	    // Need to process input and do the routing
         int vn = event->getRouteVN();
@@ -807,6 +843,8 @@ PortControl::handle_input_n2r(Event* ev)
 	    input_buf[curr_vc].push(rtr_event);
 	    input_buf_count[curr_vc]++;
 
+        rtr_event->previous_router_arrive_time = getCurrentSimTimeNano();
+        
 	    // If this becomes vc_head we need to put it into the vc_heads
 	    // array and do the routing decision here using route_packet()
 	    if ( vc_heads[curr_vc] == NULL ) {
@@ -862,6 +900,10 @@ PortControl::handle_input_r2r(Event* ev)
 	{
 	    credit_event* ce = static_cast<credit_event*>(ev);
 	    port_out_credits[ce->vc] += ce->credits;
+
+        output_used_credits[ce->vc] -= ce->credits;
+        assert(output_used_credits[ce->vc] >= 0 );
+
 	    delete ce;
         
 	    // If we're waiting, we need to send a wakeup event to the
@@ -877,6 +919,24 @@ PortControl::handle_input_r2r(Event* ev)
 	    }
 	}
     break;
+
+    case BaseRtrEvent::QTABLE:
+    {
+        qtable_event* qe = static_cast<qtable_event*>(ev);
+        topo->updateQtable(qe, port_number);
+        delete qe;
+    }
+    break;
+
+    case BaseRtrEvent::QBCAST:
+    {
+        qBcast_event* qbe = static_cast<qBcast_event*>(ev);
+        topo->updateWholeQtable(qbe, port_number);
+        delete qbe;
+    }
+    break;
+    
+
 	case BaseRtrEvent::PACKET:
 	    // This shouldn't happen
 	    break;
@@ -884,6 +944,20 @@ PortControl::handle_input_r2r(Event* ev)
     {
 	    internal_router_event* event = static_cast<internal_router_event*>(ev);
 	    // Simply put the event into the right virtual network queue
+
+        uint64_t time_diff = getCurrentSimTimeNano() - event->previous_router_arrive_time;
+
+        //qtable are of int64_t
+        assert(time_diff <= INT64_MAX);
+        event->queueing_time = time_diff;
+        event->previous_router_arrive_time = getCurrentSimTimeNano();
+        topo->update_tFromNbrTable(port_number, event);
+
+        RtrEvent* rtr_ev = event->getEncapsulatedEvent();
+        rtr_ev->incNumHops();
+
+        rtr_ev->route_path.push_back(rtr_id);
+        
         
 	    // Need to do the routing
 	    int curr_vc = event->getVC();
@@ -983,6 +1057,7 @@ PortControl::handle_output(Event* ev) {
 	    // Subtract credits
 	    port_out_credits[vc_to_send] -= size;
 	    output_buf_count[vc_to_send]++;
+        output_used_credits[vc_to_send] += size;
 
         if (is_idle) {
             idle_time->addData(Simulation::getSimulation()->getCurrentSimCycle() - idle_start);
@@ -1154,4 +1229,15 @@ if ( cur_link_width < max_link_width )
 
 else return false;
 
+}
+
+void 
+PortControl::link_send_qevent(uint32_t target_row_in_table, int64_t new_est, int vn){
+    // printf("PC: rtr %d, port %d, new est %ld, vn %d\n", rtr_id, port_number, new_est, vn);
+    port_link->send(1,new qtable_event(target_row_in_table, 0, new_est, vn, true));
+}
+
+void 
+PortControl::link_send_bcastEvent(int64_t queueing_t, std::vector<int64_t> new_est){
+    port_link->send(1,new qBcast_event(queueing_t, new_est));
 }

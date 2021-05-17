@@ -169,6 +169,11 @@ private:
     bool oql_track_remote;
 
 
+    // output_used_credits = total number of credit - current credit count
+    // This is the estimation of downsteam router input buffer queue 
+    // occupancy 
+    int* output_used_credits;
+
 
     // Variables to keep track of credits.  You need to keep track of
     // the credits available for your next buffer, as well as track
@@ -257,8 +262,7 @@ public:
     // time_base is a frequency which represents the bandwidth of the link in flits/second.
     PortControl(ComponentId_t cid, Params& params, Router* rif, int rtr_id, int port_number, Topology *topo);
 
-    void initVCs(int vns, int* vcs_per_vn, internal_router_event** vc_heads, int* xbar_in_credits, int* output_queue_lengths);
-
+    void initVCs(int vns, int* vcs_per_vn, internal_router_event** vc_heads_in, int* xbar_in_credits_in, int* output_queue_lengths_in, int* output_credits_in, int* output_used_credits_in);
 
     ~PortControl();
     void setup();
@@ -278,6 +282,12 @@ public:
     // void setupVCs(int vcs, internal_router_event** vc_heads
 	bool decreaseLinkWidth();
 	bool increaseLinkWidth();
+
+    void link_send_qevent(uint32_t dest_group, int64_t new_est, int vn);
+    int get_remote_rtr_id() {return remote_rtr_id;} 
+    int get_port_number() {return port_number;}
+
+    void link_send_bcastEvent(int64_t queueing_t, std::vector<int64_t> new_est);
 
 private:
 
