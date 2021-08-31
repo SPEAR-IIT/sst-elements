@@ -120,10 +120,13 @@ def _finalize_qos_config(total_nodes) :
     #sst.merlin._params["portcontrol:output_arb"] = "merlin.arb.output.qos.multi"
     #sst.merlin._params["portcontrol:arbitration:qos_settings"] = qos_settings
     
+    #yao
+    # print 'st.merlin._params["vn_remap"]', mylist
 
 def generate( args ):
 
     # arguments are: total_nodes, traffic class, allocation type, allocation args...
+
     args = args.split(',')
 
     total_nodes = int(args[0])

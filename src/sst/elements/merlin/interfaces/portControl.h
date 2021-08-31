@@ -73,7 +73,8 @@ public:
         {"enable_congestion_management", "Turn on congestion management","false"},
         {"cm_outstanding_threshold", "Threshold for the amount of data outstanding to a host before congestion management can trigger","2*output_buf_size"},
         {"cm_pktsize_threshold", "Minimum size of a packet to be considered part of a stream with regards to congestion management","128B"},
-        {"cm_incast_threshold", "Numbr of hosts sending to an enpoint needed to trigger congestion management","6"}
+        {"cm_incast_threshold", "Numbr of hosts sending to an enpoint needed to trigger congestion management","6"},
+        {"stats_startat", "time when statistic start recording", "0ns"},
     )
 
     // SST_ELI_DOCUMENT_STATISTICS(
@@ -214,9 +215,14 @@ private:
 
     Router* parent;
     bool connected;
+    int const num_jobs;
+    // when to start record statistics as sst-core not working properly
+    // control sent_bit_count
+    uint64_t stats_startat; 
 
     // Statistics
-    Statistic<uint64_t>* send_bit_count;
+    // Statistic<uint64_t>* send_bit_count;
+    Statistic<uint64_t>** send_bit_count; //per jobId
     Statistic<uint64_t>* send_packet_count;
     Statistic<uint64_t>* output_port_stalls;
     Statistic<uint64_t>* idle_time;

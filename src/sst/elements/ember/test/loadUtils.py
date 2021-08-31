@@ -22,6 +22,7 @@ def calcNetMapId( nodeId, nidList ):
 
     return -1
 
+# yao calculate job size according to (str)nidList 
 def calcNetMapSize( nidList ):
 
     if nidList == 'Null':
@@ -32,15 +33,15 @@ def calcNetMapSize( nidList ):
 
     for b in a:
         c = b.split('-')
-    
         xx = 1 
         if 2 == len(c):
             xx = int(c[1]) - int(c[0]) + 1
 
         pos += xx
-
+        
     return pos
 
+# yao return max node id + 1
 def calcMaxNode( nidList ):
 
     if nidList == 'Null':

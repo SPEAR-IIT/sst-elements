@@ -55,6 +55,13 @@ detailedModelParams = ""
 simConfig = ""
 platParams = ""
 
+#yao
+rting_algo= ""
+stats_startat= "0us"
+
+io_level = -1
+io_thld = -1
+
 params = {
 'network': [],
 'nic': [],
@@ -80,7 +87,10 @@ try:
                  "rtrArb=","embermotifLog=","rankmapper=", "motifAPI=",
                  "bgPercentage=","bgMean=","bgStddev=","bgMsgSize=","netInspect=",
                  "detailedModelName=","detailedModelParams=","detailedModelNodes=",
-                 "useSimpleMemoryModel","param=","paramDir=","statsModule=","statsFile="])
+                 "useSimpleMemoryModel","param=","paramDir=","statsModule=","statsFile=",
+                #yao
+                 "algoRting=", "stats_startat=", "io_level=", "io_thld=",
+                 ])
 
 except getopt.GetoptError as err:
     print (str(err))
@@ -162,6 +172,18 @@ for o, a in opts:
         statsModuleName = a
     elif o in ("--statsFile"):
         statsFile = a
+    #yao
+    elif o in ("--algoRting"):
+        rting_algo = a
+    elif o in ("--stats_startat"):
+        stats_startat = a
+    
+    elif o in ("--io_level"):
+        io_level = int(a)
+    elif o in ("--io_thld"):
+        io_thld = int(a)
+    
+    
     else:
         assert False, "unknow option {0}".format(o)
 
@@ -186,12 +208,14 @@ if simConfig:
     platform, netTopo, netShape = config.getNetwork( )
     detailedModelName, detailedModelParams, detailedModelNodes = config.getDetailedModel()
 
+#yao no workflow
 if workFlow:
     workList.append( [jobid, workFlow] )
     jobid += 1
 
 model = None
 
+# yao no detailed model name
 if detailedModelName:
 
     try:
@@ -208,6 +232,7 @@ if detailedModelName:
 
 print ("EMBER: platform: {0}".format( platform ))
 
+# yao no platParams
 if not platParams:
     platParams = platform + 'Params'
 try:
@@ -216,12 +241,34 @@ except:
     sys.exit('Failed: could not import `{0}`'.format(platParams) )
 
 
+assert(rting_algo)
 nicParams = config.nicParams
 networkParams = config.networkParams
+#yao
+networkParams['stats_startat'] = stats_startat
 hermesParams = config.hermesParams
 emberParams = config.emberParams
 platNetConfig = config.netConfig
+platNetConfig['algorithm'] = rting_algo.split(",")
 
+#yao
+rtingParams = {}
+rtingchecked=False
+if set(platNetConfig['algorithm']) & set(['par', 'ugal-3vc', 'ugal-4vc']): 
+    rtingParams.update(config.rtingParams_adp) 
+    rtingchecked=True
+
+if set(platNetConfig['algorithm']) & set(['q-routing1', 'q-routing3']):
+    rtingParams.update(config.rtingParams_q)
+    rtingchecked=True
+
+if set(platNetConfig['algorithm']) & set(['static']):
+
+    rtingchecked=True
+
+if not rtingchecked:
+    assert( set(platNetConfig['algorithm']) & set( ['minimal', 'valiant']) )
+    
 if netBW:
     networkParams['link_bw'] = netBW
 
@@ -328,6 +375,7 @@ if jobid > 0 and rndmPlacement:
         if nids:
             nidList +=","
 
+    # yao workList empty
     tmp = workList[0]
     tmp = tmp[1]
 
@@ -336,6 +384,7 @@ if jobid > 0 and rndmPlacement:
 
     random.shuffle( emptyNids )
 
+#yao init but not used
 XXX = []
 
 if rndmPlacement and bgPercentage > 0:
@@ -383,7 +432,8 @@ hermesParams['hermesParams.ctrlMsg.pqs.verboseLevel'] = debug
 hermesParams['hermesParams.ctrlMsg.pqs.verboseMask'] = -1
 
 hermesParams["hermesParams.ctrlMsg.nicsPerNode"] = nicsPerNode
-emberParams['verbose'] = emberVerbose
+## yao?? why doing this and overwrite the platform params, comment out
+# emberParams['verbose'] = emberVerbose 
 hermesParams[ emberParams['os.name'] + '.numNodes'] = topoInfo.getNumNodes()
 
 if embermotifLog:
@@ -434,7 +484,10 @@ for a in params['merlin']:
 
 nicParams["packetSize"] =    networkParams['packetSize']
 nicParams["link_bw"] = networkParams['link_bw']
-sst.merlin._params["link_lat"] = networkParams['link_lat']
+# sst.merlin._params["link_lat"] = networkParams['link_lat']
+sst.merlin._params["link_lat_host"] = networkParams['link_lat_host']
+sst.merlin._params["link_lat_local"] = networkParams['link_lat_local']
+sst.merlin._params["link_lat_global"] = networkParams['link_lat_global']
 sst.merlin._params["link_bw"] = networkParams['link_bw']
 sst.merlin._params["xbar_bw"] = networkParams['xbar_bw']
 sst.merlin._params["flit_size"] = networkParams['flitSize']
@@ -442,6 +495,14 @@ sst.merlin._params["input_latency"] = networkParams['input_latency']
 sst.merlin._params["output_latency"] = networkParams['output_latency']
 sst.merlin._params["input_buf_size"] = networkParams['input_buf_size']
 sst.merlin._params["output_buf_size"] = networkParams['output_buf_size']
+
+#yao
+sst.merlin._params.update(rtingParams)
+sst.merlin._params["stats_startat"] = stats_startat
+assert(io_level>=0)
+sst.merlin._params["io_level"] = io_level
+assert(io_thld>=0)
+sst.merlin._params["io_thld"] = io_thld
 
 if "network_inspectors" in list(networkParams.keys()):
     sst.merlin._params["network_inspectors"] = networkParams['network_inspectors']
@@ -474,10 +535,18 @@ baseNicParams = {
     "module" : nicParams['module']
 }
 
-loadInfo = LoadInfo( topoInfo.getNumNodes(), topoInfo.getNicsPerNode(), baseNicParams, epParams)
+loadInfo = LoadInfo(
+    topoInfo.getNumNodes(), 
+    topoInfo.getNicsPerNode(), 
+    baseNicParams, epParams)
 
 if len(loadFile) > 0:
+    #Yao per job
     for jobid, nidlist, numCores, params, motifs in ParseLoadFile( loadFile, loadFileVars ):
+
+        print(' jobid, nidlist, numCores, params, motifs')
+
+        print( jobid, nidlist, numCores, params, motifs)
 
         workList = []
         workFlow = []
@@ -486,9 +555,11 @@ if len(loadFile) > 0:
         myEpParams = copy.deepcopy(epParams)
         myNidList = copy.deepcopy(nidlist)
 
-
+        #yao update myNic, myEpparams from values from params
         updateParams( params, sst.merlin._params, myNicParams, myEpParams )
-
+        
+        #yao, per motif in a job 
+        # motifs: list of motif
         for motif in motifs:
             tmp = dict.copy( motifDefaults )
             tmp['cmd'] = motif

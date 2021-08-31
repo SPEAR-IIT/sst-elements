@@ -42,6 +42,8 @@ class FiniFuncSM :  public BarrierFuncSM
 
         delete event;
 
+        // printf("rank %d, start fini event @ %lu\n", m_info->getGroup(tmp->group)->getMyRank(), Simulation::getSimulation()->getCurrentSimCycle() );
+
         BarrierFuncSM::handleStartEvent(static_cast<SST::Event*>(tmp), retval );
     }
 

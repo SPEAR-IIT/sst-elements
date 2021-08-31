@@ -157,6 +157,7 @@ private:
     // output queue or when a new packet arrives
     HandlerBase* receiveFunctor;
 //    HandlerBase* sendFunctor;
+    int pktcount;
 
 public:
     ReorderLinkControl(ComponentId_t cid, Params &params, int vns);

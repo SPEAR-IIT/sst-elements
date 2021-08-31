@@ -21,7 +21,11 @@ using namespace SST::Ember;
 
 EmberHalo3D26Generator::EmberHalo3D26Generator(SST::ComponentId_t id, Params& params) :
 	EmberMessagePassingGenerator(id, params, "Halo3D26"),
-	m_loopIndex(0)
+	m_loopIndex(0),
+	//
+	m_startTime(0),
+	m_stopTime(0),
+	m_commstartTime(0)
 {
 	nx  = (uint32_t) params.find("arg.nx", 100);
 	ny  = (uint32_t) params.find("arg.ny", 100);
@@ -32,7 +36,8 @@ EmberHalo3D26Generator::EmberHalo3D26Generator(SST::ComponentId_t id, Params& pa
 	peZ = (uint32_t) params.find("arg.pez", 0);
 
 	items_per_cell = (uint32_t) params.find("arg.fields_per_cell", 1);
-	performReduction = (params.find("arg.doreduce", 1) == 1);
+	// yao not used
+	// performReduction = (params.find("arg.doreduce", 1) == 1);
 	sizeof_cell = (uint32_t) params.find("arg.datatype_width", 8);
 
 	uint64_t flops_per_cell = (uint64_t) params.find("arg.flopspercell", 26);
@@ -55,9 +60,18 @@ EmberHalo3D26Generator::EmberHalo3D26Generator(SST::ComponentId_t id, Params& pa
 			output("Halo3D: peFlops:     %lf\n", pe_flops);
 		}
 	}
-
-	nsCopyTime = (uint32_t) params.find("arg.copytime", 0);
+	// not used
+	// nsCopyTime = (uint32_t) params.find("arg.copytime", 0);
 	iterations = (uint32_t) params.find("arg.iterations", 1);
+
+		//
+	m_wait2start = params.find<uint64_t>("arg.wait2start", 1);
+	// IO for stats
+	mkdir("./ember_stats/" ,0755);
+	outfile = "./ember_stats/ember26Halo3D_rank" + std::to_string(rank()) + "_" + std::to_string(size()) + ".stats";
+	FILE *file = fopen(outfile.c_str(), "w");
+	fprintf(file, "rank,ite,start(ns),stop(ns),comm(ns)\n");
+	fclose(file);
 
 	xface_down = -1;
         xface_up = -1;
@@ -130,13 +144,16 @@ EmberHalo3D26Generator::EmberHalo3D26Generator(SST::ComponentId_t id, Params& pa
 
 
         if(0 == rank()) {
-		output("Halo3D processor decomposition solution: %" PRIu32 "x%" PRIu32 "x%" PRIu32 "\n", peX, peY, peZ);
-		output("Halo3D problem size: %" PRIu32 "x%" PRIu32 "x%" PRIu32 "\n", nx, ny, nz);
-		output("Halo3D compute time: %" PRIu64 " ns\n", compute_the_time );
-		output("Halo3D copy time:    %" PRIu32 " ns\n", nsCopyTime);
-		output("Halo3D iterations:   %" PRIu32 "\n", iterations);
-		output("Halo3D items/cell:   %" PRIu32 "\n", items_per_cell);
-		output("Halo3D do reduction: %" PRIu32 "\n", performReduction);
+		output("26Halo3D processor decomposition solution: %" PRIu32 "x%" PRIu32 "x%" PRIu32 "\n", peX, peY, peZ);
+		output("26Halo3D problem size: %" PRIu32 "x%" PRIu32 "x%" PRIu32 "\n", nx, ny, nz);
+		output("26Halo3D compute time: %" PRIu64 " ns\n", compute_the_time );
+		// output("26Halo3D copy time:    %" PRIu32 " ns\n", nsCopyTime);
+		output("26Halo3D iterations:   %" PRIu32 "\n", iterations);
+		output("26Halo3D items/cell:   %" PRIu32 "\n", items_per_cell);
+		// output("26Halo3D do reduction: %" PRIu32 "\n", performReduction);
+
+		//
+		output("26Halo3D wait2start: %lu ns\n", m_wait2start);	
 	}
 
 	assert( peX * peY * peZ == (unsigned) size() );
@@ -234,9 +251,50 @@ EmberHalo3D26Generator::EmberHalo3D26Generator(SST::ComponentId_t id, Params& pa
 bool EmberHalo3D26Generator::generate( std::queue<EmberEvent*>& evQ) {
 	verbose(CALL_INFO, 1, MOTIF_MASK, "Iteration on rank %" PRId32 "\n", rank());
 
+	//
+	uint64_t comm_time = m_stopTime - m_commstartTime;
+
+	if(rank()==0){
+	// progress msg
+	printf("\t26EmberHalo3D rank%d, ite %d, start %lu, end %lu, comm.time %lu, commstart %lu @ %lu\n", rank(), m_loopIndex, m_startTime, m_stopTime, comm_time, m_commstartTime, getCurrentSimTimeNano() );
+	}
+
+	// IO
+	if(m_loopIndex>0){
+		std::ofstream iofile;
+		iofile.open(outfile.c_str(), std::ios::app);
+		if (iofile.is_open())
+		{	
+			iofile <<rank()<<","<<m_loopIndex<<","<<m_startTime<<","<<m_stopTime<<","<<comm_time<<"\n";
+			iofile.close();
+		}
+		else assert(0);
+	}
+
+		//change place of exit assertion so that last iteration is record
+	if ( m_loopIndex == iterations ) {
+		//
+		if(rank()==0){
+			output("26EmberHalo3D rank 0 finished %d iterations\n", iterations);
+		}
+		return true;
+	}
+
+		// wait 2 start
+	if ( 0 == m_loopIndex ){
+		enQ_compute( evQ, m_wait2start );
+	}
+
+	// iterations starts here
+	enQ_getTime( evQ, &m_startTime );
+
+
 		enQ_compute( evQ, compute_the_time );
+		
 
 		int nextRequest = 0;
+
+		enQ_getTime( evQ, &m_commstartTime );
 
 		if(xface_down > -1) {
 			enQ_irecv( evQ, xface_down, items_per_cell * sizeof_cell * ny * nz, 0, GroupWorld, &requests[nextRequest]);
@@ -503,13 +561,20 @@ bool EmberHalo3D26Generator::generate( std::queue<EmberEvent*>& evQ) {
 		// Enqueue a wait all for all the communications we have set up
 		enQ_waitall( evQ, nextRequest, &requests[0], NULL );
 
+		// comm. ends
+		enQ_getTime( evQ, &m_stopTime );
+
 		verbose(CALL_INFO, 1, MOTIF_MASK, "Iteration on rank %" PRId32 " completed generation, %d events in queue\n",
 			rank(), (int)evQ.size());
 
-    if ( ++m_loopIndex == iterations ) {
-        return true;
-    } else {
-        return false;
-    }
+	//
+	m_loopIndex++;
+	return false;
+
+    // if ( ++m_loopIndex == iterations ) {
+    //     return true;
+    // } else {
+    //     return false;
+    // }
 
 }

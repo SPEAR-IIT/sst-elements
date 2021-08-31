@@ -27,7 +27,7 @@ BackgroundTraffic::BackgroundTraffic(ComponentId_t cid, Params& params) :
     Component(cid),
     next_time(0),
     id(-1)
-{
+{   
     bool found = false;
     offered_load = params.find<double>("offered_load",found);
     if ( !found ) {
@@ -69,11 +69,11 @@ BackgroundTraffic::BackgroundTraffic(ComponentId_t cid, Params& params) :
 
     // Register functors for the SimpleNetwork IF
     send_notify_functor = new SST::Interfaces::SimpleNetwork::Handler<BackgroundTraffic>(this, &BackgroundTraffic::send_notify);
+
     recv_notify_functor = new SST::Interfaces::SimpleNetwork::Handler<BackgroundTraffic>(this, &BackgroundTraffic::handle_receives);
 
     // link_if->setNotifyOnSend(send_notify_functor);
     link_if->setNotifyOnReceive(recv_notify_functor);
-
 
     // Set up the communication pattern generator
     std::string pattern = params.find<std::string>("pattern",found);
@@ -89,19 +89,17 @@ BackgroundTraffic::BackgroundTraffic(ComponentId_t cid, Params& params) :
     registerAsPrimaryComponent();
     primaryComponentOKToEndSim();
 
-    base_tc = registerTimeBase("1ps",false);
-    timing_link = configureSelfLink("timing_link", base_tc, new Event::Handler<BackgroundTraffic>(this, &BackgroundTraffic::output_timing));
+    clock_functor = new Clock::Handler<BackgroundTraffic>(this,&BackgroundTraffic::clock_handler);
+    clock_tc = registerClock("1ns", clock_functor, false);
 
-
+    // base_tc = registerTimeBase("1ps",false);
+    // timing_link = configureSelfLink("timing_link", base_tc, new Event::Handler<BackgroundTraffic>(this, &BackgroundTraffic::output_timing));
 }
-
 
 BackgroundTraffic::~BackgroundTraffic()
 {
     delete link_if;
 }
-
-
 
 void BackgroundTraffic::finish()
 {
@@ -117,9 +115,6 @@ void BackgroundTraffic::setup()
     // delay for packet.  b/s -> b in 1ps -> ps for one bit to
     // transfer.
     // link_bw = (link_bw * UnitAlgebra("1ps")).invert();
-
-    // kick things off
-    timing_link->send(0,NULL);
 }
 
 void
@@ -134,15 +129,27 @@ BackgroundTraffic::init(unsigned int phase) {
 
         // Set up send interval based on bandwidth
         UnitAlgebra link_bw = link_if->getLinkBW();
+        UnitAlgebra pkt_size = serialization_time;
 
         // Compute the send interval.  We do this by computing time to
         // serialize one packet and dividing by the offered_load.
         // pkt_size was stashed in serialization_time in the
         // constructor, so serialization_time on the right hand side
         // is actually pkt_size
-        serialization_time = ((serialization_time /*pkt_size*/ / link_bw) / UnitAlgebra("1ps"));
+        serialization_time = ((serialization_time /*pkt_size*/ / link_bw) / UnitAlgebra("1ns"));
         UnitAlgebra interval = serialization_time / offered_load;
         send_interval = interval.getRoundedValue();
+
+        if(id == 0){
+            printf("\n------- background_traffic---------\n");
+            // printf("  starttime\t%d\n", starttime);
+            printf("  job id(size)\t(%d)\n", num_peers);
+            printf("  offered_load\t%.2f\n", offered_load);
+            std::cout<<"  link bw\t" << link_bw.toStringBestSI()<<std::endl;
+            std::cout<<"  pkt size\t" << pkt_size.toStringBestSI()<<std::endl;
+            std::cout<<"  msg interval\t"<< interval.toStringBestSI()<< "  rounded value: " << send_interval << "ns" <<std::endl;
+            printf("\n");
+        }
     }
 
 }
@@ -151,7 +158,6 @@ void
 BackgroundTraffic::complete(unsigned int phase) {
     link_if->complete(phase);
  }
-
 
 bool
 BackgroundTraffic::handle_receives(int vn)
@@ -163,66 +169,92 @@ BackgroundTraffic::handle_receives(int vn)
     return true;
 }
 
-
 bool
 BackgroundTraffic::send_notify(int vn)
 {
-    // LinkControl just sent something, get current time and see if we
-    // can progress and messages
-    SimTime_t current_time = getCurrentSimTime(base_tc);
-    progress_messages(current_time);
+    // // LinkControl just sent something, get current time and see if we
+    // // can progress and messages
+    // SimTime_t current_time = getCurrentSimTime(base_tc);
+    // progress_messages(current_time);
 
-    // Determine if we are waiting for room in the LinkControl or not.
-    // We are waiting for room if next_time is earlier than
-    // current_time
-    if ( next_time <= current_time ) {
-        // Need to wait for more data to be sent.  Keep LinkControl
-        // handler installed
-        return true;
-    }
-    else {
-        // Need to wake up again at next time to send packet
-        timing_link->send(next_time - current_time, NULL);
-    }
+    // // Determine if we are waiting for room in the LinkControl or not.
+    // // We are waiting for room if next_time is earlier than
+    // // current_time
+    // if ( next_time <= current_time ) {
+    //     // Need to wait for more data to be sent.  Keep LinkControl
+    //     // handler installed
+    //     return true;
+    // }
+    // else {
+    //     // Need to wake up again at next time to send packet
+    //     timing_link->send(next_time - current_time, NULL);
+    // }
 
+    reregisterClock(clock_tc, clock_functor);
     return false;
 }
 
-void
-BackgroundTraffic::output_timing(Event* ev)
-{
-    // TraceFunction trace(CALL_INFO);
-    // Time to send next message.  Get current time and see how many
-    // we can progress
-    SimTime_t current_time = getCurrentSimTime(base_tc);
-    progress_messages(current_time);
+// void
+// BackgroundTraffic::output_timing(Event* ev)
+// {
+//     // TraceFunction trace(CALL_INFO);
+//     // Time to send next message.  Get current time and see how many
+//     // we can progress
+//     SimTime_t current_time = getCurrentSimTime(base_tc);
+//     progress_messages(current_time);
 
-    // Determine if we are waiting for room in the LinkControl or not.
-    // We are waiting for room if next_time is earlier than
-    // current_time
-    if ( next_time <= current_time ) {
-        // Need to wait for more data to be sent.  Install LinkControl
-        // handler
-        link_if->setNotifyOnSend(send_notify_functor);
+//     // Determine if we are waiting for room in the LinkControl or not.
+//     // We are waiting for room if next_time is earlier than
+//     // current_time
+//     if ( next_time <= current_time ) {
+//         // Need to wait for more data to be sent.  Install LinkControl
+//         // handler
+//         link_if->setNotifyOnSend(send_notify_functor);
+//     }
+//     else {
+//         // Need to wake up again at next time to send packet
+//         timing_link->send(next_time - current_time, NULL);
+//     }
+// }
+
+// void
+// BackgroundTraffic::progress_messages(SimTime_t current_time) {
+//     // TraceFunction trace(CALL_INFO);
+//     while ( (next_time <= current_time) && link_if->spaceToSend(0,packet_size) ) {
+//         // trace.getOutput().output("loop start: %p, %p\n",packetDestGen, link_if);
+//         background_traffic_event* ev = new background_traffic_event();
+//         // trace.getOutput().output("  loop middle 1\n");
+
+//         int dest = packetDestGen->getNextValue();
+//         assert(dest>=0 && dest< num_peers);
+//         SimpleNetwork::Request* req = new SimpleNetwork::Request(dest, id, packet_size, true, true, ev);
+//         // printf("sending background traffic from %d to %d\n",id,dest );
+//         // trace.getOutput().output("sending background traffic from %d to %d\n",id);
+//         link_if->send(req,0);
+
+//         next_time += send_interval;
+//     }
+// }
+
+bool
+BackgroundTraffic::clock_handler(Cycle_t cycle)
+{   
+    SimTime_t curr_time = getCurrentSimTime(clock_tc);
+    if(curr_time >= next_time){
+        if ( link_if->spaceToSend(0,packet_size) ) {
+            background_traffic_event* ev = new background_traffic_event();
+            int dest = packetDestGen->getNextValue();
+            assert(dest>=0 && dest< num_peers);
+            SimpleNetwork::Request* req = new SimpleNetwork::Request(dest, id, packet_size, true, true, ev);
+            req->vn = 0;
+            bool sent = link_if->send(req,0);
+            assert( sent );
+        }
+        else {      
+            link_if->setNotifyOnSend(send_notify_functor);
+            return true;
+        }
+        next_time = getCurrentSimTime(clock_tc) + send_interval;
     }
-    else {
-        // Need to wake up again at next time to send packet
-        timing_link->send(next_time - current_time, NULL);
-    }
+    return false;
 }
-
-void
-BackgroundTraffic::progress_messages(SimTime_t current_time) {
-    // TraceFunction trace(CALL_INFO);
-    while ( (next_time <= current_time) && link_if->spaceToSend(0,packet_size) ) {
-        // trace.getOutput().output("loop start: %p, %p\n",packetDestGen, link_if);
-        background_traffic_event* ev = new background_traffic_event();
-        // trace.getOutput().output("  loop middle 1\n");
-        SimpleNetwork::Request* req = new SimpleNetwork::Request(packetDestGen->getNextValue(), id, packet_size, true, true, ev);
-        // trace.getOutput().output("sending background traffic from %d\n",id);
-        link_if->send(req,0);
-
-        next_time += send_interval;
-    }
-}
-

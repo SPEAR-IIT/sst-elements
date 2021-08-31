@@ -110,7 +110,7 @@ void HadesMP::allreduce(const Hermes::MemAddr& mydata,
 		const Hermes::MemAddr& result, uint32_t count,
         PayloadDataType dtype, ReductionOperation op,
         Communicator group, Functor* retFunc)
-{
+{   
     dbg().debug(CALL_INFO,1,1,"in=%p out=%p count=%d dtype=%d\n",
                 &mydata,&result,count,dtype);
     functionSM().start( FunctionSM::Allreduce, retFunc,

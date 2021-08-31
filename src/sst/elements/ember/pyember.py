@@ -20,6 +20,8 @@ import sst
 from sst.merlin.base import *
 from sst.firefly import *
 
+## EP build need to return link_lat_host
+
 class EmberJob(Job):
     def __init__(self, job_id, num_nodes, apis, numCores = 1, nicsPerNode = 1):
         Job.__init__(self,job_id,num_nodes * nicsPerNode)

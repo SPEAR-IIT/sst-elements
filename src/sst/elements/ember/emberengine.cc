@@ -40,7 +40,6 @@ EmberEngine::EmberEngine(SST::ComponentId_t id, SST::Params& params) :
 	uint32_t mask = (uint32_t) params.find("verboseMask", 0);
 	m_jobId = params.find("jobId", -1);
 
-
 	std::ostringstream prefix;
 	prefix << "@t:" << m_jobId << ":EmberEngine:@p:@l: ";
 
@@ -101,6 +100,14 @@ EmberEngine::EmberEngine(SST::ComponentId_t id, SST::Params& params) :
 	// Create a time converter for our compute events
 	nanoTimeConverter =
         Simulation::getSimulation()->getTimeLord()->getTimeConverter("1ns");
+
+    if(id <5){
+        printf("---------emberengine %lu (jobid%d)-----------\n", id, m_jobId);
+        printf("verbose %u, verbosemask %u\n",verbosity, mask );
+        printf("motiflog %s\n", motifLogFile.c_str());
+        printf("-----------------------------------\n");
+    }
+    
 }
 
 EmberEngine::~EmberEngine() {
@@ -294,7 +301,8 @@ void EmberEngine::issueNextEvent(uint64_t nanoDelay) {
 }
 
 bool EmberEngine::completeFunctor( int retval, EmberEvent* ev )
-{
+{   
+
     output.debug(CALL_INFO, 2, ENGINE_MASK, "%s %s Event\n",
               ev->stateName( ev->state() ).c_str(), ev->getName().c_str());
 

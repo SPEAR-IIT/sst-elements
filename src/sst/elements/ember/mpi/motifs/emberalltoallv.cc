@@ -22,7 +22,9 @@ using namespace SST::Ember;
 EmberAlltoallvGenerator::EmberAlltoallvGenerator(SST::ComponentId_t id,
                                             Params& params) :
 	EmberMessagePassingGenerator(id, params, "Alltoallv"),
-    m_loopIndex(0)
+    m_loopIndex(0),
+    m_startTime(0),
+    m_stopTime(0)
 {
 	m_iterations = (uint32_t) params.find("arg.iterations", 1);
 	m_count      = (uint32_t) params.find("arg.count", 1);
@@ -39,6 +41,24 @@ EmberAlltoallvGenerator::EmberAlltoallvGenerator(SST::ComponentId_t id,
         m_recvCnts[i] = m_count;
         m_recvDsp[i] = ((size()-1) - 1) * m_count;
     }
+
+    nsCompute = (uint64_t) params.find("arg.computetime", 1000);
+    m_wait2start = (uint64_t) params.find("arg.wait2start", 1);
+
+    mkdir("./ember_stats/" ,0755);
+    outfile = "./ember_stats/emberA2Av_rank" + std::to_string(rank()) + "_" + std::to_string(size()) + ".stats";
+    FILE *file = fopen(outfile.c_str(), "w");
+    fprintf(file, "rank,ite,start(ns),stop(ns),comm(ns)\n");
+    fclose(file);
+
+	if(0 == rank()){
+		output( "-----------------------------------\n");
+        output( "emberA2Av %d ranks\n", size());
+        output( "emberA2Av count: %d \n", m_count);
+        output( "emberA2Av %u its\n", m_iterations);
+        output( "emberA2Av compute time: %u \n", nsCompute);
+        output( "emberA2Av wait2start: %lu ns \n", m_wait2start);
+    }
 }
 
 bool EmberAlltoallvGenerator::generate( std::queue<EmberEvent*>& evQ) {
@@ -47,12 +67,52 @@ bool EmberAlltoallvGenerator::generate( std::queue<EmberEvent*>& evQ) {
         verbose(CALL_INFO, 1, 0, "rank=%d size=%d\n", rank(), size());
     }
 
+    //report porgress, nano-sec
+    if(rank()==0){
+        // progress msg
+        printf("\temberA2Av rank%d, ite %d, compute time %u, start %lu, end %lu @ %lu\n", rank(), m_loopIndex, nsCompute, m_startTime, m_stopTime, getCurrentSimTimeNano() );
+    }
+    // IO
+	if(m_loopIndex>0){
+        std::ofstream iofile;
+        iofile.open(outfile.c_str(), std::ios::app);
+        if (iofile.is_open())
+        {	
+			uint64_t commtime = (m_stopTime - m_startTime) - nsCompute;
+
+            iofile <<rank()<<","<<m_loopIndex<<","<<m_startTime<<","<<m_stopTime<<","<<commtime<<"\n";
+            iofile.close();
+        }
+        else assert(0);
+    }
+
+    if ( m_loopIndex == m_iterations ) {
+        if ( 0 == rank() ) {
+            output( "%s: ranks %d, iterations %d done\n",
+                    getMotifName().c_str(), size(), m_iterations);
+        }
+        return true;
+    }
+
+    if( 0 == m_loopIndex) {
+		enQ_compute( evQ, m_wait2start );
+    }
+
+	enQ_getTime( evQ, &m_startTime );
+
+    enQ_compute( evQ, nsCompute );
+
     enQ_alltoallv( evQ, m_sendBuf, &m_sendCnts[0], &m_sendDsp[0], DOUBLE,
         m_recvBuf, &m_recvCnts[0], &m_recvDsp[0], DOUBLE, GroupWorld );
 
-    if ( ++m_loopIndex == m_iterations ) {
-        return true;
-    } else {
-        return false;
-    }
+    enQ_getTime( evQ, &m_stopTime );
+
+    ++m_loopIndex;
+    return false;
+    
+    // if ( ++m_loopIndex == m_iterations ) {
+    //     return true;
+    // } else {
+    //     return false;
+    // }
 }

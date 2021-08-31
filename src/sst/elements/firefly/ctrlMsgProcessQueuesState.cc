@@ -160,7 +160,8 @@ void ProcessQueuesState::enterSend( _CommReq* req, uint64_t exitDelay )
 }
 
 void ProcessQueuesState::processSend_0( _CommReq* req )
-{
+{   
+
     m_mem->write(
         std::bind( &ProcessQueuesState::processSend_1, this, req ),
         0, sizeof( req->hdr())

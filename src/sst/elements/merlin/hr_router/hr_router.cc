@@ -79,13 +79,11 @@ static std::string getLogicalGroupParam(const Params& params, Topology* topo, in
     if ( value == "" ) {
         // Look for default value
         value = params.find<std::string>(param, default_val);
-
         if ( value == "" ) {
             // Abort
             merlin_abort.fatal(CALL_INFO, -1, "hr_router requires %s to be specified\n", param.c_str());
         }
     }
-
     return value;
 }
 
@@ -214,6 +212,9 @@ hr_router::hr_router(ComponentId_t cid, Params& params) :
     UnitAlgebra xbar_clock;
     xbar_clock = xbar_bw_ua / flit_size;
 
+    if(id==0) printf("HR_RTR 0, xbar clock %s\n", xbar_clock.toStringBestSI().c_str()); 
+
+
     std::string input_latency = params.find<std::string>("input_latency", "0ns");
     std::string output_latency = params.find<std::string>("output_latency", "0ns");
 
@@ -223,6 +224,13 @@ hr_router::hr_router(ComponentId_t cid, Params& params) :
 
     std::string input_buf_size = params.find<std::string>("input_buf_size", "0");
     std::string output_buf_size = params.find<std::string>("output_buf_size", "0");
+
+    UnitAlgebra output_buf_size_ua(output_buf_size);
+    if ( output_buf_size_ua.hasUnits("B") ) {
+        output_buf_size_ua *= UnitAlgebra("8b/B");
+    }
+    UnitAlgebra obs = output_buf_size_ua / flit_size;
+    topo->set_output_queue_length(obs.getRoundedValue());
 
 
     // Naming convention is from point of view of the xbar.  So,
@@ -247,6 +255,8 @@ hr_router::hr_router(ComponentId_t cid, Params& params) :
     if (pc_params.contains("network_inspectors")) pc_params.insert("network_inspectors", params.find<std::string>("network_inspectors", ""));
     pc_params.insert("oql_track_port", params.find<std::string>("oql_track_port","false"));
     pc_params.insert("oql_track_remote", params.find<std::string>("oql_track_remote","false"));
+
+    pc_params.insert("stats_startat", params.find<std::string>("stats_startat","0ns"));
 
     for ( int i = 0; i < num_ports; i++ ) {
         in_port_busy[i] = 0;
@@ -312,20 +322,23 @@ hr_router::hr_router(ComponentId_t cid, Params& params) :
 
     init_vcs();
 
-    // if(id == 0){
-    //     output.output("\n-------hr_router---------\n");
-    //     output.output("num_vns %d\n", num_vns);
-    //     output.output("link_bw %s\n", link_bw.toStringBestSI().c_str());
-    //     output.output("link_bw:host %s\n", params.find<std::string>("link_bw:host").c_str());
-    //     output.output("xbar_bw %s\n", xbar_bw_ua.toStringBestSI().c_str());
-    //     output.output("flit_size %s\n", flit_size.toStringBestSI().c_str());
-    //     output.output("input_latency %s\n", input_latency.c_str());
-    //     output.output("output_latency %s\n", output_latency.c_str());
-    //     output.output("input_buf_size %s\n", input_buf_size.c_str());
-    //     output.output("output_buf_size %s\n", output_buf_size.c_str());
-    //     output.output("num_ports %d, num_vcs/port %d, num_vns %d\n", num_ports, num_vcs, num_vns);
-    //     output.output("-----------------------\n");
-    // }
+    if(id == 0){
+        output.output("\n-------hr_router---------\n");
+        output.output("num_vns %d\n", num_vns);
+        output.output("link_bw %s\n", link_bw.toStringBestSI().c_str());
+        output.output("link_bw:host %s\n", params.find<std::string>("link_bw:host").c_str());
+        output.output("xbar_bw %s\n", xbar_bw_ua.toStringBestSI().c_str());
+        output.output("flit_size %s\n", flit_size.toStringBestSI().c_str());
+        output.output("input_latency %s\n", input_latency.c_str());
+        output.output("output_latency %s\n", output_latency.c_str());
+        output.output("input_buf_size %s\n", input_buf_size.c_str());
+        output.output("output_buf_size %s\n", output_buf_size.c_str());
+        output.output("output_queue_length %ld\n", obs.getRoundedValue());
+
+        output.output("num_ports %d, num_vcs/port %d, num_vns %d\n", num_ports, num_vcs, num_vns);
+
+        output.output("-----------------------\n");
+    }
 }
 
 
@@ -339,6 +352,7 @@ hr_router::notifyEvent()
     Cycle_t next_cycle = getNextClockCycle( xbar_tc );
 #else
     Cycle_t next_cycle = reregisterClock( xbar_tc, my_clock_handler);
+
 #endif
 
     int64_t elapsed_cycles = next_cycle - unclocked_cycle;
@@ -430,6 +444,7 @@ hr_router::clock_handler(Cycle_t cycle)
         // if ( progress_vcs[i] != -1 ) {
         if ( progress_vcs[i] > -1 ) {
             internal_router_event* ev = ports[i]->recv(progress_vcs[i]);
+
             ports[ev->getNextPort()]->send(ev,ev->getVC());
 
             if ( ev->getTraceType() == SimpleNetwork::Request::FULL ) {
@@ -463,10 +478,17 @@ hr_router::clock_handler(Cycle_t cycle)
 }
 
 void hr_router::setup()
-{
+{   
     for ( int i = 0; i < num_ports; i++ ) {
     	ports[i]->setup();
     }
+
+    // yao as 2021-10-8, Merlin:Dragonfly update with link failure 
+    // simulation changed the structure of shared region. Such that
+    // setQtable cannot be called in Dragonfly contrusctor, as setQtable calls
+    // port_for_group() which may make RouteToGroup class object access invalid
+    // mem address and cause seg fault
+    topo->setQtable();
 }
 
 void hr_router::finish()
@@ -479,7 +501,7 @@ void hr_router::finish()
 
 void
 hr_router::init(unsigned int phase)
-{
+{   
     for ( int i = 0; i < num_ports; i++ ) {
         ports[i]->init(phase);
         Event *ev = NULL;
@@ -618,6 +640,7 @@ hr_router::init_vcs()
     vc_heads = new internal_router_event*[num_ports*num_vcs];
     xbar_in_credits = new int[num_ports*num_vcs];
     output_queue_lengths = new int[num_ports*num_vcs];
+
     output_credits = new int[num_ports*num_vcs];
     output_used_credits = new int[num_ports*num_vcs];
 
@@ -642,27 +665,7 @@ hr_router::init_vcs()
     // Now that we have the number of VCs we can finish initializing
     // arbitration logic
     arb->setPorts(num_ports, num_vcs);
-}
 
-//For Dragonfly
-void
-hr_router::bcast_qvalue_thld(uint32_t target_row_intable, int64_t new_est, std::vector<int> bcast_ports, int vn)
-{
-    // printf("HR_R %d, Bcast new est %ld for G%u\n", id, new_est, dest_group);
-    for ( int i : bcast_ports ) {
-        ports[i]->link_send_qevent(target_row_intable, new_est, vn);
-    }
-}
-
-void
-hr_router::bcast_qvalue_perid(std::vector<int> bcast_ports, uint32_t num_host, std::vector<int64_t> qBcastTable, std::vector<int64_t> tFromNbrTable)
-{
-    // if(id == 0){
-    //     printf("HR_RTR %d, now %lu\n",id, getCurrentSimTimeNano());
-    // } 
-    for ( int i : bcast_ports ) {
-        ports[i]->link_send_bcastEvent(tFromNbrTable[i-num_host], qBcastTable);
-    }
 }
 
 void

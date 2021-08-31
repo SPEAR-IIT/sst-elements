@@ -10,12 +10,27 @@ def init( outputFile ):
     	"separator" : ", "
 	})
 
-	sst.enableStatisticForComponentType("firefly.nic",'mem_num_stores',{"type":"sst.AccumulatorStatistic","rate":"0ns"})
-	sst.enableStatisticForComponentType("firefly.nic",'mem_num_loads',{"type":"sst.AccumulatorStatistic","rate":"0ns"})
+	# sst.enableStatisticForComponentType("firefly.nic",'mem_num_stores',{"type":"sst.AccumulatorStatistic","rate":"0ns"})
+	# sst.enableStatisticForComponentType("firefly.nic",'mem_num_loads',{"type":"sst.AccumulatorStatistic","rate":"0ns"})
 
-	sst.enableStatisticForComponentType("firefly.nic",'mem_addrs',
-	{"type":"sst.HistogramStatistic",
-		"rate":"0ns",
-		"binwidth":"4096",
-		"numbins":"512"}
+	# sst.enableStatisticForComponentType("firefly.nic",'mem_addrs',
+	# {"type":"sst.HistogramStatistic",
+	# 	"rate":"0ns",
+	# 	"binwidth":"4096",
+	# 	"numbins":"512"}
+	# )
+
+	#yao
+	sst.enableAllStatisticsForAllComponents(
+		{
+			"type":"sst.AccumulatorStatistic",
+			# "rate":"100 ns",
+			# "startat":"60us",
+			# "stopat":"70us"
+		}
+
+		# {"type":"sst.HistogramStatistic",
+		# "rate":"0ns",
+		# "binwidth":"4096",
+		# "numbins":"512"}
 	)

@@ -212,6 +212,7 @@ void FunctionSM::processRetval(  Retval& retval )
 {
     if ( retval.isExit() ) {
         m_dbg.debug(CALL_INFO,3,0,"Exit %" PRIu64 "\n", retval.value() );
+
         if ( m_retFunc ) {
             DriverEvent* x = new DriverEvent( m_retFunc, retval.value() );
             m_toDriverLink->send( m_sm->returnLatency(), x );
@@ -222,6 +223,7 @@ void FunctionSM::processRetval(  Retval& retval )
         m_dbg.debug(CALL_INFO,3,0,"Delay %" PRIu64 "\n", retval.value() );
         m_toMeLink->send( retval.value(), NULL );
     } else {
+        // printf("functionSM: processRetval, not delay nor exit\n");
     }
 }
 

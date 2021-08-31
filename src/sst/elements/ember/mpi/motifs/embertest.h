@@ -34,6 +34,14 @@ public:
         "Performs a Test Motif",
         SST::Ember::EmberGenerator
     )
+
+    // used as an empty motif test for background
+    SST_ELI_DOCUMENT_PARAMS(
+        {   "arg.iterations",       "Sets the number of ping pong operations to perform",   "1"},
+        {   "arg.compute",          "Sets the wait mode",   "1"},
+        {   "arg.wait2start",          "Sets the wait mode",   "1"},
+    )
+
     SST_ELI_DOCUMENT_STATISTICS(
         { "time-Init", "Time spent in Init event",          "ns",  0},
         { "time-Finalize", "Time spent in Finalize event",  "ns", 0},
@@ -64,37 +72,71 @@ public:
 	EmberTestGenerator(SST::ComponentId_t id, Params& params):
         EmberMessagePassingGenerator(id, params, "Null" ), m_phase(Init)
 	{
-		m_rng = new SST::RNG::XORShiftRNG();
+		// m_rng = new SST::RNG::XORShiftRNG();
+
+        //
+        m_loopIndex = 0;
+        m_iterations = (uint32_t) params.find("arg.iterations", 1);
+	    m_compute    = (uint64_t) params.find("arg.compute", 0);
+        m_wait2start = (uint64_t) params.find("arg.wait2start", 1);
+        
+        if(rank() == 0) {
+            printf("-----------EmberTestMotif size: %d---------\n", size());
+            printf("iterations: %u\n", m_iterations);
+            printf("compute: %lu\n", m_compute);
+            printf("wait2start: %lu\n", m_wait2start);
+        }
 	}
+
     bool generate( std::queue<EmberEvent*>& evQ){
-		assert( size() == 2 );
-		switch ( m_phase ) {
-			case Init:
-				m_rng->seed( rank() + getSeed() );
-				if ( rank() == 0 ) {
-				 	enQ_irecv( evQ, NULL, 0, CHAR, 1, 0xdeadbeef, GroupWorld, &m_req );
-					enQ_test( evQ, &m_req, &m_flag, &m_resp );
-					m_phase = Check;
-					return false;
-				} else {
-					enQ_compute( evQ, m_rng->generateNextUInt32() % 1000000 );
-					enQ_send( evQ, NULL, 0, CHAR, 0, 0xdeadbeef, GroupWorld );
-					return true;
-				}
+		// assert( size() == 2 );
+		// switch ( m_phase ) {
+		// 	case Init:
+		// 		m_rng->seed( rank() + getSeed() );
+		// 		if ( rank() == 0 ) {
+		// 		 	enQ_irecv( evQ, NULL, 0, CHAR, 1, 0xdeadbeef, GroupWorld, &m_req );
+		// 			enQ_test( evQ, &m_req, &m_flag, &m_resp );
+		// 			m_phase = Check;
+		// 			return false;
+		// 		} else {
+		// 			enQ_compute( evQ, m_rng->generateNextUInt32() % 1000000 );
+		// 			enQ_send( evQ, NULL, 0, CHAR, 0, 0xdeadbeef, GroupWorld );
+		// 			return true;
+		// 		}
 
-			case Check:
+		// 	case Check:
 
-				if ( m_flag ) {
-					printf("src=%d\n", m_resp.src );
-					return true;
-				} else {
-					enQ_compute( evQ, 10000 );
-					printf("test again\n" );
-					enQ_test( evQ, &m_req, &m_flag, &m_resp );
-					return false;
-				}
-		}
-		assert(0);
+		// 		if ( m_flag ) {
+		// 			printf("src=%d\n", m_resp.src );
+		// 			return true;
+		// 		} else {
+		// 			enQ_compute( evQ, 10000 );
+		// 			printf("test again\n" );
+		// 			enQ_test( evQ, &m_req, &m_flag, &m_resp );
+		// 			return false;
+		// 		}
+		// }
+		// assert(0);
+
+        //
+
+        if(m_loopIndex == m_iterations){
+            if(rank() == 0){
+                printf("EmberTestMotif finish, start@ %lu, end@ %lu, lat: %lu\n", m_startTime, m_stopTime, m_stopTime-m_startTime);
+            }
+            return true;
+        }
+
+        if(m_loopIndex == 0){
+            enQ_compute( evQ, m_wait2start );
+            enQ_getTime( evQ, &m_startTime );
+        } 
+
+        enQ_compute( evQ, m_compute);
+        enQ_getTime( evQ, &m_stopTime );
+
+        m_loopIndex++;
+        return false;
 	}
 
 private:
@@ -110,6 +152,16 @@ private:
 	enum { Init, Check } m_phase;
 	MessageRequest  m_req;
     MessageResponse m_resp;
+
+
+    //
+    uint32_t m_loopIndex;
+    uint64_t m_compute;
+	uint32_t m_iterations;
+    uint64_t m_wait2start;
+
+    uint64_t  m_startTime;
+    uint64_t  m_stopTime;
 };
 
 }

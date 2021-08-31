@@ -70,7 +70,10 @@ public:
     { }
 
     bool generate( std::queue<EmberEvent*>& evQ )
-    {
+    {   
+        //
+        // printf("emberinit: size=%d rank=%d\n",m_size,m_rank);
+
 		if ( 0 == m_size ) {
 			verbose(CALL_INFO, 1, MOTIF_MASK, "\n");
         	enQ_init( evQ );

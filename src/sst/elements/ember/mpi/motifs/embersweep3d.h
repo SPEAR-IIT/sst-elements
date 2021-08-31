@@ -19,6 +19,10 @@
 
 #include "mpi/embermpigen.h"
 
+//
+#include <sys/stat.h>
+#include <fstream>
+
 namespace SST {
 namespace Ember {
 
@@ -47,6 +51,9 @@ public:
         {   "arg.flops_per_cell",           "Sets the number of FLOPs per cell", "275" },
         {   "arg.nodeflops",                "Sets the FLOP/s count for the MPI rank", "1000000000"},
         {   "arg.computetime",      "Sets the compute time per nx * ny block in picoseconds", "1000"},
+
+        //
+        {   "arg.wait2start",      "wait how long to start?",        "1"}, 
     )
 
     SST_ELI_DOCUMENT_STATISTICS(
@@ -99,6 +106,12 @@ private:
 
 	uint32_t nsCompute;
 	uint32_t iterations;
+
+        //
+    uint64_t m_startTime;  //NetworkSim
+    uint64_t m_stopTime;  //NetworkSim
+    uint64_t m_wait2start;
+    std::string outfile; //IO file 
 };
 
 }

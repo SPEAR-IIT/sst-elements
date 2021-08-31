@@ -19,6 +19,9 @@
 
 #include "mpi/embermpigen.h"
 
+#include <sys/stat.h>
+#include <fstream>
+
 namespace SST {
 namespace Ember {
 
@@ -39,6 +42,9 @@ public:
         {   "arg.compute",      "Sets the time spent computing",        "1"},
         {   "arg.count",        "Sets the number of elements to reduce",        "1"},
         {   "arg.doUserFunc",   "Test reduce operation",        "false"},
+
+        {   "arg.wait2start",      "wait how long to start?",        "1"}, 
+        {   "arg.dobarrier",      "do a barrier between iteration?",  "false"},
     )
 
     SST_ELI_DOCUMENT_STATISTICS(
@@ -79,6 +85,11 @@ private:
     void*    m_recvBuf;
     uint32_t m_loopIndex;
 	_ReductionOperation* m_op;
+
+    uint64_t m_wait2start;
+    std::string outfile; //IO file 
+    bool dobarrier;
+    uint64_t  comm_start_time;
 };
 
 }

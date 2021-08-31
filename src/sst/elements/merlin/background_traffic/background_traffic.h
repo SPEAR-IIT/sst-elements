@@ -72,7 +72,7 @@ public:
 
     SST_ELI_DOCUMENT_PARAMS(
         {"num_peers",        "Total number of endpoints in network."},
-        {"packet_size",      "Packet size specified in either b or B (can include SI prefix).","32B"},
+        {"message_size",      "Packet size specified in either b or B (can include SI prefix).","32B"},
         {"pattern",          "Traffic pattern to use.","merlin.targetgen.uniform"},
         {"offered_load",     "Load to be offered to network.  Valid range: 0 < offered_load <= 1.0."},
     )
@@ -105,8 +105,9 @@ private:
     SST::Interfaces::SimpleNetwork::Handler<BackgroundTraffic>* send_notify_functor;
     SST::Interfaces::SimpleNetwork::Handler<BackgroundTraffic>* recv_notify_functor;
 
-
     TargetGenerator *packetDestGen;
+    Clock::Handler<BackgroundTraffic>* clock_functor;
+    TimeConverter* clock_tc;
 
     int id;
     int num_peers;
@@ -133,6 +134,8 @@ private:
 
     void output_timing(Event* ev);
     void progress_messages(SimTime_t current_time);
+
+    bool clock_handler(Cycle_t cycle);
 
 };
 

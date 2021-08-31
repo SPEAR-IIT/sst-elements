@@ -57,11 +57,20 @@ EmberHalo3DGenerator::EmberHalo3DGenerator(SST::ComponentId_t id, Params& params
 
     jobId        = params.find<int>("_jobId"); //NetworkSim
 
-	configure();
+	//
+	m_wait2start = params.find<uint64_t>("arg.wait2start", 1);
+
+	configure(params);
+
+	// IO for stats
+	mkdir("./ember_stats/" ,0755);
+	outfile = "./ember_stats/emberHalo3D_rank" + std::to_string(rank()) + "_" + std::to_string(size()) + ".stats";
+	FILE *file = fopen(outfile.c_str(), "w");
+	fprintf(file, "rank,ite,start(ns),stop(ns),comm(ns)\n");
+	fclose(file);
 }
 
-
-void EmberHalo3DGenerator::configure()
+void EmberHalo3DGenerator::configure(Params& params)
 {
 	unsigned worldSize = size();
 
@@ -103,6 +112,7 @@ void EmberHalo3DGenerator::configure()
 
 	}
 
+	uint64_t flops_per_cell = params.find<uint64_t>("arg.flopspercell", 26);
     if(0 == rank()) {
 		output("Halo3D processor decomposition solution: %" PRIu32 "x%" PRIu32 "x%" PRIu32 "\n", peX, peY, peZ);
 		output("Halo3D problem size: %" PRIu32 "x%" PRIu32 "x%" PRIu32 "\n", nx, ny, nz);
@@ -110,7 +120,12 @@ void EmberHalo3DGenerator::configure()
 		output("Halo3D copy time: %" PRIu32 " ns\n", nsCopyTime);
 		output("Halo3D iterations: %" PRIu32 "\n", iterations);
 		output("Halo3D iterms/cell: %" PRIu32 "\n", items_per_cell);
+		//
+		output("Halo3D size of cell: %" PRIu32 "\n", sizeof_cell);
+		output("Halo3D flops: %" PRIu64 "\n", flops_per_cell);
 		output("Halo3D do reduction: %" PRIu32 "\n", performReduction);
+		//
+		output("Halo3D wait2start: %lu ns\n", m_wait2start);	
 	}
 
 	assert( peX * peY * peZ == worldSize );
@@ -146,33 +161,46 @@ bool EmberHalo3DGenerator::generate( std::queue<EmberEvent*>& evQ )
 {
     verbose(CALL_INFO, 1, 0, "loop=%d\n", m_loopIndex );
 
-    	//NetworkSim: record motif start time
-    	/*
-        if ( 0 == m_loopIndex ) {
-        	m_startTime = getCurrentSimTimeMicro();
-        	//output("Start time:%.3f us\n", (double)m_startTime );
-            //enQ_getTime( evQ, &m_startTime );
-        }
+	uint64_t comm_time = m_stopTime - m_startTime - nsCompute - 3*nsCopyTime;
 
-        if ( m_loopIndex == iterations ) {
-	    	//NetworkSim: report total running time
-	        //enQ_getTime( evQ, &m_stopTime );
-	        m_stopTime = getCurrentSimTimeMicro();
-	    	if ( 0 == rank() ) {
-	            double latency = (double)(m_stopTime-m_startTime);
-	            double latency_per_iter = latency/(double)iterations;
-	            output("Motif Latency: JobNum:%d Total latency:%.3f us\n", jobId, latency );
-	            output("Motif Latency: JobNum:%d Per iteration latency:%.3f us\n", jobId, latency_per_iter );
-	        	output("Job Finished: JobNum:%d Time:%" PRIu64 " us\n", jobId,  getCurrentSimTimeMicro());
-    		}//end->NetworkSim
-        	return true;
-    	}
-    	*/
-        //end->NetworkSim
+	if(rank()==0){
+	// progress msg
+	printf("\tEmberHalo3D rank%d, ite %d, start %lu, end %lu, comm.time %lu @ %lu\n", rank(), m_loopIndex, m_startTime, m_stopTime, comm_time, getCurrentSimTimeNano() );
+	}
 
+	// IO
+	if(m_loopIndex>0){
+		std::ofstream iofile;
+		iofile.open(outfile.c_str(), std::ios::app);
+		if (iofile.is_open())
+		{	
+			iofile <<rank()<<","<<m_loopIndex<<","<<m_startTime<<","<<m_stopTime<<","<<comm_time<<"\n";
+			iofile.close();
+		}
+		else assert(0);
+	}
+
+	//change place of exit assertion so that last iteration is record
+	if ( m_loopIndex == iterations ) {
+		//
+		if(rank()==0){
+			output("EmberHalo3D rank 0 finished %d iterations\n", iterations);
+		}
+		return true;
+	}
+
+		// wait 2 start
+		if ( 0 == m_loopIndex ){
+			enQ_compute( evQ, m_wait2start );
+		}
+
+		// ite begins
+		enQ_getTime( evQ, &m_startTime );
 		enQ_compute( evQ, nsCompute);
 
 		std::vector<MessageRequest*> requests;
+
+		//time stamp0
 
 		if(x_down > -1) {
 			MessageRequest*  req  = new MessageRequest();
@@ -200,6 +228,8 @@ bool EmberHalo3DGenerator::generate( std::queue<EmberEvent*>& evQ )
 			enQ_wait( evQ, requests[i]);
 		}
 
+		//time stamp1
+		
 		requests.clear();
 
 		if(nsCopyTime > 0) {
@@ -278,12 +308,23 @@ bool EmberHalo3DGenerator::generate( std::queue<EmberEvent*>& evQ )
 			enQ_allreduce( evQ, NULL, NULL, 1, DOUBLE, MP::SUM, GroupWorld);
 		}
 
+		// comm. ends
+		enQ_getTime( evQ, &m_stopTime );
+	
+		// change exit place to begine
+		m_loopIndex++;
+		return false;
+    // if ( ++m_loopIndex == iterations ) {
 
-    if ( ++m_loopIndex == iterations ) {
-        return true;
-    } else {
-        return false;
-    }
+	// 	//
+	// 	if(rank()==0){
+	// 		output("EmberHalo3D rank 0 finished %d iterations\n", iterations);
+	// 	}
+
+    //     return true;
+    // } else {
+    //     return false;
+    // }
 
     //m_loopIndex++;
     //return false;

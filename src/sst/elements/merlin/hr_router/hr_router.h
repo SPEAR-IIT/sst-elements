@@ -68,11 +68,12 @@ public:
         {"num_vns",            "Number of VNs.","2"},
         {"vn_remap",           "Array that specifies the vn remapping for each node in the systsm."},
         {"vn_remap_shm",       "Name of shared memory region for vn remapping.  If empty, no remapping is done", ""},
-        {"debug",              "Turn on debugging for router. Set to 1 for on, 0 for off.", "0"}
+        {"debug",              "Turn on debugging for router. Set to 1 for on, 0 for off.", "0"},
+        {"stats_startat", "time when statistic start recording", "0ns"},
     )
 
     SST_ELI_DOCUMENT_STATISTICS(
-        { "send_bit_count",     "Count number of bits sent on link", "bits", 1},
+        { "send_bit_count",     "Count number of bits sent on link", "bits", 1},        
         { "send_packet_count",  "Count number of packets sent on link", "packets", 1},
         { "output_port_stalls", "Time output port is stalled (in units of core timebase)", "time in stalls", 1},
         { "xbar_stalls",        "Count number of cycles the xbar is stalled", "cycles", 1},
@@ -108,6 +109,9 @@ private:
     internal_router_event** vc_heads;
     int* xbar_in_credits;
     int* output_queue_lengths;
+
+    int* output_credits;
+    int* output_used_credits;
 
 #if VERIFY_DECLOCKING
     bool clocking;

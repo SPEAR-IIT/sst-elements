@@ -56,6 +56,21 @@ EmberSweep3DGenerator::EmberSweep3DGenerator(SST::ComponentId_t id, Params& para
 		(compute_time_d / node_flops) * NANO_SECONDS);
 
 	assert(nsCompute != 0);
+
+	//
+	m_wait2start = params.find<uint64_t>("arg.wait2start", 1);
+	// IO for stats
+	mkdir("./ember_stats/" ,0755);
+	outfile = "./ember_stats/emberSweep3D_rank" + std::to_string(rank()) + "_" + std::to_string(size()) + ".stats";
+	FILE *file = fopen(outfile.c_str(), "w");
+	fprintf(file, "ite,start(ns),stop(ns)\n");
+	fclose(file);
+
+	if( rank() == 0 ){
+		output("-------- EmberSweep3D %d ranks, %u ites -------\n", size(), iterations);
+		output("mpi ranks (x,y): %d %d, || problem (x,y,z) %u %u %u, kba %u\n", px, py, nx,ny,nz, kba);
+		output("data_width %u, fields_per_cell %u, compute_time %uns, wait2start %luns\n\n", data_width, fields_per_cell, nsCompute, m_wait2start);
+	}
 }
 
 void EmberSweep3DGenerator::configure()
@@ -95,9 +110,41 @@ void EmberSweep3DGenerator::configure()
 
 bool EmberSweep3DGenerator::generate( std::queue<EmberEvent*>& evQ) {
 
+	// IO
+	if(m_loopIndex > 0 && m_loopIndex % 2 == 0 && m_InnerLoopIndex==0){
+		std::ofstream iofile;
+		iofile.open(outfile.c_str(), std::ios::app);
+		if (iofile.is_open())
+		{
+			iofile <<m_loopIndex/2<<","<<m_startTime<<","<<m_stopTime<<"\n";
+			iofile.close();
+		}
+		else assert(0);
+
+		if(rank() == 0){
+		// progress msg
+		// if( (iterations/5 !=0) && ( m_loopIndex %  (iterations/5) == 0)) {
+			printf("\t\tEmberSweep3d rank %d, loopindex %u, innerloopidx %u, start %lu, end %lu\n", rank(), m_loopIndex, (unsigned int)m_InnerLoopIndex, m_startTime, m_stopTime );
+		// }
+	}
+
+
+	}
+
+	if ( m_loopIndex == (iterations * 2) ){
+		if(rank() == 0){
+			printf("EmberSweep3D done\n");
+		}
+		return true;
+	}
+
 	if( 0 == m_loopIndex && 0 == m_InnerLoopIndex ) {
 		configure();
 		verbose(CALL_INFO, 2, MOTIF_MASK, "rank=%d size=%d\n", rank(), size());
+		
+		// wait2 start
+		// printf("\t\t This only appear once rank %d\n", rank());
+		enQ_compute( evQ, m_wait2start );
 	}
 
 	//for(uint32_t repeat = 0; repeat < 2; ++repeat) {
@@ -106,6 +153,12 @@ bool EmberSweep3DGenerator::generate( std::queue<EmberEvent*>& evQ) {
 
 	case 0:
 		// Sweep from (0, 0) outwards towards (Px, Py)
+
+		// this is a start of a new iteration
+		if( m_loopIndex % 2 == 0){
+			enQ_getTime( evQ, &m_startTime );
+		}
+
 		for(uint32_t i = 0; i < nz; i+= kba) {
 			if(x_down >= 0) {
 				enQ_recv(evQ, x_down, (nx * kba * data_width * fields_per_cell), 1000, GroupWorld );
@@ -198,18 +251,30 @@ bool EmberSweep3DGenerator::generate( std::queue<EmberEvent*>& evQ) {
 			}
         }
 
+		// end of this iteration
+		if( m_loopIndex % 2 == 1){
+			enQ_getTime( evQ, &m_stopTime );
+		}
+
         break;
 	}
 	//}
 
+	// change assert of exit
 	if( ++m_InnerLoopIndex == 4 ) {
-    	if ( ++m_loopIndex == (iterations * 2) ) {
-        	return true;
-    	} else {
-    		m_InnerLoopIndex = 0;
-        	return false;
-    	}
-    } else {
-    	return false;
-    }
+		m_InnerLoopIndex = 0;
+		++m_loopIndex; 
+	}
+	return false;
+
+	// if( ++m_InnerLoopIndex == 4 ) {
+    // 	if ( ++m_loopIndex == (iterations * 2) ) {
+    //     	return true;
+    // 	} else {
+    // 		m_InnerLoopIndex = 0;
+    //     	return false;
+    // 	}
+    // } else {
+    // 	return false;
+    // }
 }

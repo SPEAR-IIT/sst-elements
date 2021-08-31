@@ -19,6 +19,11 @@
 
 #include "mpi/embermpigen.h"
 
+//
+#include <sys/stat.h>
+#include <fstream>
+
+
 namespace SST {
 namespace Ember {
 
@@ -37,6 +42,12 @@ public:
     SST_ELI_DOCUMENT_PARAMS(
         {   "arg.messagesize",      "Sets the message size of the communications (in count of DOUBLE)", "1"},
         {   "arg.iterations",       "Sets the number of iterations to perform",     "1"},
+
+                //
+        {   "arg.waitunblock",      "wait isend irecv? 0 no, 1yes",        "1"}, 
+        {   "arg.compute",      "Sets the time spent computing",        "1"},
+        {   "arg.wait2start",      "wait how long to start?",        "1"}, 
+        {   "arg.subiterations",      "how many iterations under one iteration",        "1"}, 
     )
 
     SST_ELI_DOCUMENT_STATISTICS(
@@ -70,6 +81,22 @@ protected:
 	uint32_t maxIterations;
 	uint32_t iteration;
 	uint32_t msgSize;
+
+    //
+    int subiterations;
+    int waitunblock;
+    uint64_t  m_startTime;
+    uint64_t  m_stopTime;
+    uint64_t  m_commStartTime;
+    uint64_t  m_isend_time;
+
+    uint64_t m_compute;
+    uint64_t m_wait2start;
+    std::string outfile; //IO file 
+    std::stringstream ostring; // write this string to outfile
+    int report_step;
+
+    std::vector<MessageRequest> msgRequests; 
 
 };
 

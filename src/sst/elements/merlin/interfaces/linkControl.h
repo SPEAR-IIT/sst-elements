@@ -31,6 +31,9 @@
 
 #include <queue>
 
+#include <sys/stat.h>
+#include <fstream>
+
 namespace SST {
 
 class Component;
@@ -69,6 +72,9 @@ public:
         {"nid_map_name",       "Base name of shared region where my NID map will be located.  If empty, no NID map will be used.",""},
         {"vn_remap",           "Remap VNs onto/off of the network.  If empty, no vn remapping is done", "" },
 
+        {"io_level",    "0--no IO, 1--record packet latency, 2--record latency and routing path", "2"},
+        {"io_thld",    "Byte, string.size > io_thld write string ", "0"},
+
     )
 
     SST_ELI_DOCUMENT_STATISTICS(
@@ -76,7 +82,9 @@ public:
         { "send_bit_count",     "Count number of bits sent on link", "bits", 1},
         { "output_port_stalls", "Time output port is stalled (in units of core timebase)", "time in stalls", 1},
         { "idle_time",          "Number of (in unites of core timebas) that port was idle", "time spent idle", 1},
-        // { "recv_bit_count",     "Count number of bits received on the link", "bits", 1},
+        { "packet_hops",        "Number of link hops each packet travels", "hops", 1},
+        { "packet_adp",     "Number of packets adaptively routed", "num adaptive", 1},
+
     )
 
     SST_ELI_DOCUMENT_PORTS(
@@ -153,7 +161,7 @@ private:
     nid_t id;
     nid_t logical_nid;
     int job_id;
-    Shared::SharedArray<nid_t> nid_map;
+    Shared::SharedArray<nid_t> nid_map;  // logical_nid => real_nid 
     bool use_nid_map;
 
     // Doing a round robin on the output.  Need to keep track of the
@@ -212,8 +220,19 @@ private:
     Statistic<uint64_t>* recv_bit_count;
 
     RtrInitEvent* checkInitProtocol(Event* ev, RtrInitEvent::Commands command, uint32_t line, const char* file, const char* func);
-
+    
     Output& output;
+    
+    Statistic<uint64_t>* packet_hops;
+    Statistic<uint64_t>* packet_adp;
+    // TimeConverter* timeconvert; 
+    Output* out2file;
+    std::string outfile;    // file name to record each msg lat
+    std::string outfile2;    //record each msg when sent
+    FILE * iofile_handler;     
+    int io_level; 
+    std::stringstream ostring; // write this string to outfile
+    size_t io_thld; // Byte, when ostring size > io_thld, write to file
 
 public:
     LinkControl(ComponentId_t cid, Params &params, int vns);

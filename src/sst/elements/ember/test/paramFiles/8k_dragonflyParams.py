@@ -78,7 +78,16 @@ emberParams = {
     'firefly.hadesSHMEM.verboseMask'  : -1,
     'firefly.hadesSHMEM.enterLat_ns'  : 7,
     'firefly.hadesSHMEM.returnLat_ns' : 7,
-    "verbose" : 0,
+    
+    ## !! yao
+    "verbose" : 10,
+
+    #yao
+    'verboseMask': 0,
+
+    # 'motifLog': 'motif.log',
+    'firefly.hadesMP.verboseLevel' : 100,
+    'firefly.hadesMP.verboseMask'  : 0,
 }
 
 hermesParams = {

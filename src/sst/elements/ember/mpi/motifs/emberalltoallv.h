@@ -19,6 +19,10 @@
 
 #include "mpi/embermpigen.h"
 
+//
+#include <sys/stat.h>
+#include <fstream>
+
 namespace SST {
 namespace Ember {
 
@@ -37,6 +41,10 @@ public:
     SST_ELI_DOCUMENT_PARAMS(
         {   "arg.iterations",   "Sets the number of alltoall operations to perform",    "1"},
         {   "arg.count",        "Sets the number of data items",        "1"},
+        
+        //
+        {   "arg.computetime",      "Sets the compute time per KBA-data block in nanoseconds", "1000"},
+        {   "arg.wait2start",      "wait how long to start?",        "1"}, 
     )
 
     SST_ELI_DOCUMENT_STATISTICS(
@@ -78,6 +86,13 @@ private:
     std::vector<int>    m_sendDsp;
     std::vector<int>    m_recvCnts;
     std::vector<int>    m_recvDsp;
+
+    //
+    uint32_t nsCompute;
+    uint64_t m_wait2start;
+    std::string outfile; //IO file 
+    uint64_t  m_startTime;
+    uint64_t  m_stopTime;
 };
 
 }

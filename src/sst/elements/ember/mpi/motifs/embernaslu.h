@@ -19,6 +19,10 @@
 
 #include "mpi/embermpigen.h"
 
+//
+#include <sys/stat.h>
+#include <fstream>
+
 namespace SST {
 namespace Ember {
 
@@ -43,6 +47,9 @@ public:
         {   "arg.ny",           "Sets the problem size in the Y-dimension", "50"},
         {   "arg.nz",           "Sets the problem size in the Z-dimension", "50"},
         {   "arg.nzblock",      "Sets the Z-dimensional block size (Nz % Nzblock == 0, default is 1)", "1"},
+
+                //
+        {   "arg.wait2start",      "wait how long to start?",        "1"}, 
     )
 
     SST_ELI_DOCUMENT_STATISTICS(
@@ -92,6 +99,13 @@ private:
 
 	uint32_t nsCompute;
 	uint32_t iterations;
+
+    //
+    uint64_t m_wait2start;
+    std::string outfile; //IO file 
+    uint64_t  m_startTime;
+    uint64_t  m_stopTime;
+    
 };
 
 }

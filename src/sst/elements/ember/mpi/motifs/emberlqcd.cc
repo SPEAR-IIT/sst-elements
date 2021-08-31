@@ -22,12 +22,26 @@ using namespace SST::Ember;
 
 EmberLQCDGenerator::EmberLQCDGenerator(SST::ComponentId_t id, Params& params) :
 	EmberMessagePassingGenerator(id, params, "LQCD"),
-	m_loopIndex(0)
+	m_loopIndex(0),
+    //
+    t_ite_start(0),
+    t_ite_end(0),
+    t_all_reduce1_start(0),
+    t_all_reduce1_end(0),
+    t_all_reduce2_start(0),
+    t_all_reduce2_end(0)
 {
 	nx  = (uint32_t) params.find("arg.nx", 64);
 	ny  = (uint32_t) params.find("arg.ny", 64);
 	nz  = (uint32_t) params.find("arg.nz", 64);
 	nt  = (uint32_t) params.find("arg.nt", 64);
+
+    //
+    m_wait2start = (uint64_t) params.find("arg.wait2start", 1);
+    t_parity_start[0] = t_parity_start[1] = 0;
+    t_parity_end[0] = t_parity_end[1] = 0;
+    t_parity_start2[0] = t_parity_start2[1] = 0;
+    t_parity_end2[0] = t_parity_end2[1] = 0;
 
     num_nodes = size();
     sites_on_node = nx*ny*nz*nt/num_nodes;
@@ -90,6 +104,12 @@ EmberLQCDGenerator::EmberLQCDGenerator(SST::ComponentId_t id, Params& params) :
         }
     }
 
+    // read nscompute time
+    nsCompute  = (uint64_t) params.find("arg.computetime", 0);
+    if (rank() == 0){
+	    output("LQCD nsCompute set:%" PRIu64 " ns\n", nsCompute);
+    }
+
 	iterations = (uint32_t) params.find("arg.iterations", 1);
 
     coll_start = 0;
@@ -111,8 +131,14 @@ EmberLQCDGenerator::EmberLQCDGenerator(SST::ComponentId_t id, Params& params) :
 	n_ranks[TUP]   = -1;
 
 	configure();
-}
 
+    // IO
+    mkdir("./ember_stats/" ,0755);
+    outfile = "./ember_stats/emberLQCD_rank" + std::to_string(rank()) + "_" + std::to_string(size()) + ".stats";
+    FILE *file = fopen(outfile.c_str(), "w");
+    fprintf(file, "rank,ite,start(ns),stop(ns),comm(ns),parity1_start,parity1_end,parity1_start2,parity1_end2,parity2_start,parity2_end,parity2_start2,parity2_end2,allred1_start,allred1_end,allred2_start,allred2_end\n");
+    fclose(file);
+}
 
 //returns the rank that holds the site x,y,z,t
 int EmberLQCDGenerator::get_node_index(int x, int y, int z, int t){
@@ -137,6 +163,9 @@ void EmberLQCDGenerator::lex_coords(int coords[], const int dim, const int size[
   uint32_t r = rank;
 
   for(d = 0; d < dim; d++){
+    //
+    if(size[d] == 0) printf("rank %d: size[%d] = 0\n", r, d);
+    
     coords[d] = r % size[d];
     r /= size[d];
   }
@@ -176,13 +205,18 @@ int EmberLQCDGenerator::lex_rank(const int coords[], int dim, int size[])
 }
 
 void EmberLQCDGenerator::setup_hyper_prime(){
-    int prime[] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53};
+    int prime[] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53};                   
     int dir, i, j, k;
     int len_primes = sizeof(prime)/sizeof(int);
     /* Figure out dimensions of rectangle */
     squaresize[XUP] = nx; squaresize[YUP] = ny;
     squaresize[ZUP] = nz; squaresize[TUP] = nt;
     nsquares[XUP] = nsquares[YUP] = nsquares[ZUP] = nsquares[TUP] = 1;
+
+    // if(0 == rank() || 527 == rank() ) {
+    //     output("LQCD nsquares size: x%" PRIu32 "y%" PRIu32 "z%" PRIu32 "t%" PRIu32"\n", nsquares[XUP], nsquares[YUP], nsquares[ZUP], nsquares[TUP]);
+    //     output("LQCD square size: x%" PRIu32 "y%" PRIu32 "z%" PRIu32 "t%" PRIu32"\n", squaresize[XUP], squaresize[YUP], squaresize[ZUP], squaresize[TUP]);
+    // }
 
     i = 1;	/* current number of hypercubes */
     while(i<num_nodes){
@@ -196,6 +230,12 @@ void EmberLQCDGenerator::setup_hyper_prime(){
             if( squaresize[dir]>j && squaresize[dir]%prime[k]==0 )
                 j=squaresize[dir];
 
+
+        // if(0 == rank() || 527 == rank() ) {
+        //     printf("\tbegin while rank %d, j %d, k %d, dir %d, prime[%d]=%d, nsquares[%d]=%d, nsquares[0]=%d\n", rank(), j, k, dir, k, prime[k], dir, nsquares[dir], nsquares[0] );
+        // }
+
+
         /* if one direction with largest dimension has already been
            divided, divide it again.  Otherwise divide first direction
            with largest dimension. */
@@ -205,13 +245,24 @@ void EmberLQCDGenerator::setup_hyper_prime(){
             if( squaresize[dir]==j )break;
         /* This can fail if I run out of prime factors in the dimensions */
         if(dir > TUP){
-            if(rank() == 0)
-                printf("LAYOUT: Can't lay out this lattice, not enough factors of %d\n"
-               ,prime[k]);
+            // if(rank() == 0)
+                printf("LAYOUT: Can't lay out this lattice, not enough factors of %d, rank %d\n"
+               ,prime[k], rank());
+
+                //
+               assert(0);
         }
+
+        // if(0 == rank() || 527 == rank() ) {
+        //     printf("\tbefore modify rank %d, j %d, k %d, dir %d, prime[%d]=%d, nsquares[%d]=%d, nsquares[0]=%d\n", rank(), j, k, dir, k, prime[k], dir, nsquares[dir], nsquares[0] );
+        // }
 
         /* do the surgery */
         i*=prime[k]; squaresize[dir] /= prime[k]; nsquares[dir] *= prime[k];
+
+        // if(0 == rank() || 527 == rank() ) {
+        //     printf("\tafter modify rank %d, j %d, k %d, dir %d, prime[%d]=%d, nsquares[%d]=%d, nsquares[0]=%d\n", rank(), j, k, dir, k, prime[k], dir, nsquares[dir], nsquares[0] );
+        // }
     }
     if(0 == rank()) {
         output("LQCD nsquares size: x%" PRIu32 "y%" PRIu32 "z%" PRIu32 "t%" PRIu32"\n", nsquares[XUP], nsquares[YUP], nsquares[ZUP], nsquares[TUP]);
@@ -260,6 +311,10 @@ void EmberLQCDGenerator::configure()
     //code from MILC setup_hyper_prime()
     setup_hyper_prime();
 
+    for (int id = 0; id < 4; id++){
+        if(nsquares[id] == 0) printf("after setuphyper rank%d nsquares[%d]=0\n", rank(), id);
+    }
+
     //the coordinates of this rank in pe_x, pe_y, pe_z, pe_t
     lex_coords(machine_coordinates, 4, nsquares, rank());
 
@@ -274,6 +329,15 @@ void EmberLQCDGenerator::configure()
         else output("LQCD compute time resid: %" PRIu64 " mmvs4d: %" PRIu64 " ns\n", compute_nseconds_resid, compute_nseconds_mmvs4d);
 		output("LQCD iterations: %" PRIu32 "\n", iterations);
 		output("LQCD sites per node: %" PRIu32 "\n", sites_on_node);
+        //
+        output("LQCD wait2start(ns): %" PRIu64 "\n", m_wait2start);
+        output("LQCD send size of transsz: ");
+        for (int d = XUP; d <= XDOWN; d++){
+            int transsz = get_transfer_size(d);
+            output(" %d--%d," , d, transsz );
+        }
+        output("\n");
+            
 	}
     //determine rank of neighbors in each direction x,y,z,t
     int tmp_coords[4];
@@ -302,7 +366,7 @@ void EmberLQCDGenerator::configure()
 // in MILC lattice QCD.
 // This is mostly focused on the Conjugate Gradient and Dslash
 bool EmberLQCDGenerator::generate( std::queue<EmberEvent*>& evQ )
-{
+{   
     verbose(CALL_INFO, 1, 0, "loop=%d\n", m_loopIndex );
 	std::vector<MessageRequest*> pos_requests;
 	std::vector<MessageRequest*> neg_requests;
@@ -314,7 +378,60 @@ bool EmberLQCDGenerator::generate( std::queue<EmberEvent*>& evQ )
     // Enqueue gather from positive and negative directions (8 total)  su3_vector
     int transsz = 500;
 
+
+    //report progress
+    if(rank()==0){
+        output("\t\t rank%d, ite %d, start %lu, end %lu\n"
+                "\t\t\t parity1 start %lu end %lu, start2 %lu end %lu\n"
+                "\t\t\t parity2 start %lu end %lu, start2 %lu end %lu\n"
+                "\t\t\t allreduce1 start %lu end %lu, allreduce2 start %lu end %lu\n" ,
+                rank(), m_loopIndex, t_ite_start, t_ite_end, 
+                t_parity_start[0], t_parity_end[0], t_parity_start2[0], t_parity_end2[0],
+                t_parity_start[1], t_parity_end[1], t_parity_start2[1], t_parity_end2[1],
+                t_all_reduce1_start, t_all_reduce1_end, t_all_reduce2_start, t_all_reduce2_end
+                );
+    }
+
+    if(m_loopIndex>0){
+
+        uint64_t comm_time = t_parity_end[0] - t_parity_start[0];
+        comm_time += (t_parity_end2[0] - t_parity_start2[0]);
+        comm_time += (t_parity_end[1] - t_parity_start[1]);
+        comm_time += (t_parity_end2[1] - t_parity_start2[1]);
+        comm_time += (t_all_reduce1_end - t_all_reduce1_start);
+        comm_time += (t_all_reduce2_end - t_all_reduce2_start);
+
+        std::ofstream iofile;
+        iofile.open(outfile.c_str(), std::ios::app);
+        if (iofile.is_open())
+        {
+            iofile <<rank()<<","<<m_loopIndex<<","<<t_ite_start<<","<<t_ite_end<<","<<comm_time<<",";
+            iofile <<t_parity_start[0]<<","<<t_parity_end[0]<<","<<t_parity_start2[0]<<","<<t_parity_end2[0]<<",";
+            iofile <<t_parity_start[1]<<","<<t_parity_end[1]<<","<<t_parity_start2[1]<<","<<t_parity_end2[1]<<",";
+            iofile << t_all_reduce1_start<< "," << t_all_reduce1_end<< "," << t_all_reduce2_start<< "," << t_all_reduce2_end <<"\n";
+            iofile.close();
+        }
+        else assert(0);
+    }
+
+    if (  m_loopIndex == iterations ) {
+        if ( 0 == rank() ) {
+            output("%s: nRanks=%d done\n", getMotifName().c_str(), size());
+        }
+        return true;
+    }
+
+    // wait 2 start
+    if ( 0 == m_loopIndex ) {
+        enQ_compute( evQ, m_wait2start );
+    }
+
+    // LQCD starts here
+    enQ_getTime( evQ, &t_ite_start );
+
     for (int parity = 1; parity <= even_odd; parity++){
+
+        enQ_getTime( evQ, t_parity_start+(parity-1) );
 
         for (int d = XUP; d <= TUP; d++){
             if (n_ranks[d] != -1){
@@ -409,6 +526,9 @@ bool EmberLQCDGenerator::generate( std::queue<EmberEvent*>& evQ )
         for(uint32_t i = 0; i < pos_requests.size(); ++i) {
             enQ_wait( evQ, pos_requests[i]);
         }
+        
+        enQ_getTime( evQ, t_parity_end+(parity-1) );
+
         pos_requests.clear();
 
         // Compute Matrix Vector Multiply Sum in 4 directions
@@ -421,11 +541,15 @@ bool EmberLQCDGenerator::generate( std::queue<EmberEvent*>& evQ )
         comp_time += Simulation::getSimulation()->getCurrentSimCycle() - comp_start;
         //output("Rank %" PRIu32 ", Compute end: %" PRIu64 "\n", rank(), Simulation::getSimulation()->getCurrentSimCycle());
 
+        enQ_getTime( evQ, t_parity_start2+(parity-1) );
+
         //Wait on negative gathers (8 total)
 	    verbose(CALL_INFO, 1, 0, "Rank: %" PRIu32 ", -Messages to wait on: %zu\n", rank(), neg_requests.size());
         for(uint32_t i = 0; i < neg_requests.size(); ++i) {
             enQ_wait( evQ, neg_requests[i]);
         }
+
+        enQ_getTime( evQ, t_parity_end2+(parity-1) );
 
         neg_requests.clear();
 
@@ -441,7 +565,13 @@ bool EmberLQCDGenerator::generate( std::queue<EmberEvent*>& evQ )
 
     // Allreduce MPI_DOUBLE
     coll_start = Simulation::getSimulation()->getCurrentSimCycle();
+
+    enQ_getTime( evQ, &t_all_reduce1_start);
+
     enQ_allreduce( evQ, NULL, NULL, 1, DOUBLE, MP::SUM, GroupWorld);
+
+    enQ_getTime( evQ, &t_all_reduce1_end);
+
     coll_time += Simulation::getSimulation()->getCurrentSimCycle() - coll_start;
     // Compute ResidSq
     // Our profiling shows this is ~ 1/4th the FLOPS of the
@@ -453,15 +583,27 @@ bool EmberLQCDGenerator::generate( std::queue<EmberEvent*>& evQ )
     // Allreduce MPI_DOUBLE
     coll_start = Simulation::getSimulation()->getCurrentSimCycle();
     //output("Rank %" PRIu32 ", Collective start: %" PRIu64 "\n", rank(), coll_start);
+
+    enQ_getTime( evQ, &t_all_reduce2_start);
+
     enQ_allreduce( evQ, NULL, NULL, 1, DOUBLE, MP::SUM, GroupWorld);
+
+    enQ_getTime( evQ, &t_all_reduce2_end);
+
     coll_time += Simulation::getSimulation()->getCurrentSimCycle() - coll_start;
     //output("Rank %" PRIu32 ", Collective end: %" PRIu64 "\n", rank(), Simulation::getSimulation()->getCurrentSimCycle());
 
-    if ( ++m_loopIndex == iterations ) {
-        //output("Rank %" PRIu32 ", Time spent in collectives (ns): %" PRIu64 "\n", rank(), coll_time);
-        return true;
-    } else {
-        return false;
-    }
+    enQ_getTime( evQ, &t_ite_end );
+
+    //
+    // if ( ++m_loopIndex == iterations ) {
+    //     //output("Rank %" PRIu32 ", Time spent in collectives (ns): %" PRIu64 "\n", rank(), coll_time);
+    //     return true;
+    // } else {
+    //     return false;
+    // }
+
+    m_loopIndex++;
+    return false;
 }
 

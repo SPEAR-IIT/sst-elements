@@ -4,6 +4,9 @@ from sst.merlin import *
 
 from loadUtils import *
 
+#yao
+import copy
+
 class EmberEP( EndPoint ):
     def __init__( self, jobId, driverParams, nicParams, motifs, nicsPerNode, numCores, ranksPerNode, statNodes, nidMap, numNodes, motifLogNodes, detailedModel ): # added motifLogNodes here
 
@@ -29,7 +32,6 @@ class EmberEP( EndPoint ):
 
     def build( self, nodeID, extraKeys ):
 
-        
         # See if this endpoints is not an ember endpoint
         if self.motifs["motif0.name"].startswith("<"):
             # This is a non ember endpoint. Find the element name.
@@ -44,11 +46,12 @@ class EmberEP( EndPoint ):
 
             ep = sst.Component( "nic" + str(nodeID), element)
             sc = ep.setSubComponent(slot, self.nicParams["module"])
-            retval = (sc, "rtr_port", sst.merlin._params["link_lat"] )
+            #yao
+            # retval = (sc, "rtr_port", sst.merlin._params["link_lat"] )
+            retval = (sc, "rtr_port", sst.merlin._params["link_lat_host"] )
             
             # Add paramters to the component
             ep.addParams(self.motifs["params"])
-
             ep.addParam("num_peers",self.numNids)
             
             # Add parameters to the linkcontrol
@@ -57,11 +60,18 @@ class EmberEP( EndPoint ):
             sc.addParam("output_buf_size",sst.merlin._params["output_buf_size"]);
             sc.addParam("logical_nid",self.nidMap[nodeID])
             sc.addParam("logical_peers",self.numNids)
-            sc.addParam("nid_map_name","nid_map_jobid_%d"%self.driverParams["jobId"])
+            sc.addParam("nid_map_name","job_%d_nid_map"%self.driverParams["jobId"])
+
+            #yao required by linkcontrol
+            sc.addParam("job_id", self.driverParams["jobId"])
+            sc.addParam("job_size",self.numNids)
+            sc.addParam("use_nid_remap",True)  # explicitly set to use nid_map
+            # print('EmberEP: set ', element, 'done with jobid ', self.driverParams["jobId"])
+            sc.addParam("io_level", sst.merlin._params["io_level"]) 
+            sc.addParam("io_thld", sst.merlin._params["io_thld"]) 
+
             return retval
 
-        
-        
         # Regular ember motif processing
         nicComponentName = "firefly.nic"
         if 'nicComponent' in self.nicParams:
@@ -76,21 +86,36 @@ class EmberEP( EndPoint ):
             rtrLink.addParam("input_buf_size",self.nicParams["input_buf_size"])
         if "output_buf_size" in self.nicParams:
             rtrLink.addParam("output_buf_size",self.nicParams["output_buf_size"])
+        #yao
+        rtrLink.addParam("job_id", self.driverParams["jobId"])
+        rtrLink.addParam("logical_nid",self.nidMap[nodeID])
+        # rtrLink.addParam("job_size",self.numNids)
+        # Ember & Firefly take care of nid remap
+        rtrLink.addParam("use_nid_remap",0) 
+        # rtrLink.addParam("nid_map_name","job_%d_nid_map"%self.driverParams["jobId"])
+        rtrLink.addParam("io_level", sst.merlin._params["io_level"]) 
+        rtrLink.addParam("io_thld", sst.merlin._params["io_thld"]) 
 
         nic.addParams( self.nicParams )
         nic.addParams( extraKeys)
         nic.addParam( "nid", nodeID )
-        retval = (rtrLink, "rtr_port", sst.merlin._params["link_lat"] )
+
+        # yao explicitly setting EP to router link latency 
+        # retval = (rtrLink, "rtr_port", sst.merlin._params["link_lat"] )
+        retval = (rtrLink, "rtr_port", sst.merlin._params["link_lat_host"] )
         
         built = False 
         if self.detailedModel:
-            #print (nodeID,  "use detailed")
+            # print (nodeID,  "use detailed")
             built = self.detailedModel.build( nodeID, self.numCores )
+
+        #yao
+        # print('EmeberEP: building node ', nodeID, ' built is', built )
 
         memory = None
         if built:
             if self.nicParams["useSimpleMemoryModel"] == 0 :
-                #print (nodeID,  "addLink  detailed")
+                # print (nodeID,  "addLink  detailed")
 
                 nicDetailedRead = nic.setSubComponent(  "nicDetailedRead", self.nicParams['detailedCompute.name']  )
                 nicDetailedRead.addLink( self.detailedModel.getNicReadLink(), "detailed0", "1ps" )
@@ -116,7 +141,9 @@ class EmberEP( EndPoint ):
             self.loopBackDict[loopBackName] = loopBack 
         else:
             loopBack = self.loopBackDict[loopBackName]
-
+        
+        # yao
+        # print('\tloopbackname:', loopBackName)
 
         # Create a motifLog only for one core of the desired node(s)
         logCreatedforFirstCore = False
@@ -124,6 +151,9 @@ class EmberEP( EndPoint ):
 
         for x in range(self.numCores//self.nicsPerNode):
             ep = sst.Component("nic" + str(nodeID) + "core" + str(x) + "_EmberEP", "ember.EmberEngine")
+            
+            #yao
+            # print('\t\temberEngine:', "nic" + str(nodeID) + "core" + str(x) + "_EmberEP")
 
             os = ep.setSubComponent( "OS", "firefly.hades" )
             for key, value in list(self.driverParams.items()):
@@ -150,6 +180,11 @@ class EmberEP( EndPoint ):
                     process.addParam( key,value)
 
             ep.addParams(self.motifs)
+
+            #yao
+            if nodeID == 0:
+                print('EmberEP, addParams motifs: ', self.motifs)
+
             if built:
                 links = self.detailedModel.getThreadLinks( x )
                 cpuNum = 0
@@ -160,7 +195,13 @@ class EmberEP( EndPoint ):
 
             # Create a motif log only for the desired list of nodes (endpoints)
             # Delete the 'motifLog' parameter from the param list of other endpoints
+
+            #yao
+
             if 'motifLog' in self.driverParams:
+                if nodeID == 0:
+                    print('\tEmberEP, motiflog: |{}|'.format(self.driverParams['motifLog']))
+
                 if self.driverParams['motifLog'] != '':
                     if (self.motifLogNodes):
                         for id in self.motifLogNodes:
@@ -179,10 +220,9 @@ class EmberEP( EndPoint ):
                         ep.addParams(tempParams)
                 else:
                     ep.addParams(self.driverParams)                      
-            else:
+            else:                
                 ep.addParams(self.driverParams)
-               # end          
-
+               # end   
 
             # Original version before motifLog
             #ep.addParams(self.driverParams)

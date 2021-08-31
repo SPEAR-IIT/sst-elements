@@ -65,7 +65,7 @@ class LoadInfo:
             sys.exit('ERROR: LoadInfo.initWork() invalid argument {0}'.format(workList) )
 
         jobid = workList[0][0]
-        work = workList[0][1]
+        work = workList[0][1] #yao motifs of a job
 
         ep = self.createEP( jobid, nidList, self.parts[nidList].numCores, self.readWorkList( jobid, nidList, work ), statNodes, self.parts[nidList].detailedModel )
         self.setEndpoint( nidList, ep )
@@ -87,7 +87,8 @@ class LoadInfo:
                     self.endPointMap[i] = ep
                     self.globalToLocalNidMap[i] = pos
                     pos += 1
-
+    
+    #yao store motif name and params in a dict
     def readWorkList(self, jobid, nidList, workList ):
         tmp = {}
         tmp['motif_count'] = len(workList)
@@ -101,8 +102,9 @@ class LoadInfo:
             motif = self.parseCmd( "ember.", "Motif", cmdList, i )
 
             for x in list(work.items()):
+                # yao
+                # print( "loadinfo.py: ", x[0], x[1], type(x[1]))
                 motif[ 'motif' + str(i) + '.' + x[0] ] = x[1]
-
             tmp.update( motif )
 
         return tmp
@@ -135,6 +137,13 @@ class LoadInfo:
             y = x.split("=")
             tmp    = 'motif' + str(cmdNum) + '.arg.' + y[0]
             motif[ tmp ] = y[1]
+
+            #yao provide a list to params
+            if y[1][0] == '[':
+                assert( y[1][-1] == ']')
+                tmpparam = y[1].strip('[]').split(',')
+                motif[ tmp ] = tmpparam
+            # print( 'loadinfo.py ', tmp, y[1], type(y[1])  )
 
         return motif
 

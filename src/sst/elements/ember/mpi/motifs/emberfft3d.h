@@ -19,6 +19,10 @@
 
 #include "mpi/embermpigen.h"
 
+//
+#include <sys/stat.h>
+#include <fstream>
+
 namespace SST {
 namespace Ember {
 
@@ -47,6 +51,10 @@ public:
         { "arg.bwd_fft1",  "", "" },
         { "arg.bwd_fft2",  "", "" },
         { "arg.bwd_fft3",  "", "" },
+
+        //
+        {   "arg.wait2start",      "wait how long to start?",        "1"}, 
+
     )
 
     SST_ELI_DOCUMENT_STATISTICS(
@@ -149,6 +157,15 @@ private:
     void*               m_recvBuf;
     float              m_nsPerElement;
     std::vector<float> m_transCostPer;
+
+    //
+    uint64_t m_wait2start;
+    std::string outfile; //IO file 
+    uint64_t comm_time[12];
+
+    uint64_t m_startTime;
+    uint64_t m_stopTime;
+
 };
 
 }

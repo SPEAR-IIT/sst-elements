@@ -25,7 +25,10 @@ using namespace SST::Ember;
 
 EmberNASLUGenerator::EmberNASLUGenerator(SST::ComponentId_t id, Params& params) :
 	EmberMessagePassingGenerator(id, params, "NASLU"),
-	m_loopIndex(0)
+	m_loopIndex(0),
+	//
+	m_startTime(0),
+	m_stopTime(0)
 {
 	nsCompute = (uint64_t) params.find("arg.computetime", 1000);
 
@@ -39,10 +42,29 @@ EmberNASLUGenerator::EmberNASLUGenerator(SST::ComponentId_t id, Params& params) 
 	nz  = (uint32_t) params.find("arg.nz", 50);
 	nzblock = (uint32_t) params.find("arg.nzblock", 1);
 
+	//
+    m_wait2start = (uint64_t) params.find("arg.wait2start", 1);
+
 	// Check K-blocking factor is acceptable for dividing the Nz dimension
 	assert(nz % nzblock == 0);
 
 	configure();
+
+	mkdir("./ember_stats/" ,0755);
+    outfile = "./ember_stats/emberNASLU_rank" + std::to_string(rank()) + "_" + std::to_string(size()) + ".stats";
+    FILE *file = fopen(outfile.c_str(), "w");
+    fprintf(file, "rank,ite,start(ns),stop(ns),comm(ns)\n");
+    fclose(file);
+
+	if(0 == rank()){
+		output( "-----------------------------------\n");
+        output( "emberNASLU %d ranks\n", size());
+        output( "emberNASLU %u its\n", iterations);
+        output( "emberNASLU compute time: %u \n", nsCompute);
+        output( "emberNASLU problem: %u %u %u nzblock %u\n", nx, ny, nz, nzblock);
+		output( "emberNASLU jobsize: %d %d\n", px, py);
+        output( "emberNASLU wait2start: %lu ns \n", m_wait2start);
+    }
 }
 
 void EmberNASLUGenerator::configure()
@@ -76,10 +98,45 @@ void EmberNASLUGenerator::configure()
 }
 
 bool EmberNASLUGenerator::generate( std::queue<EmberEvent*>& evQ)
-{
+{	
+	// report porgress, nano-sec
+    if(rank()==0){
+        // progress msg
+        printf("\temberNASLU rank%d, ite %d, compute time %u, start %lu, end %lu @ %lu\n", rank(), m_loopIndex, nsCompute, m_startTime, m_stopTime, getCurrentSimTimeNano() );
+    }
+
+	// IO
+	if(m_loopIndex>0){
+        std::ofstream iofile;
+        iofile.open(outfile.c_str(), std::ios::app);
+        if (iofile.is_open())
+        {	
+			uint64_t commtime = (m_stopTime - m_startTime) - 2 * (nz / nzblock ) * nsCompute;
+
+            iofile <<rank()<<","<<m_loopIndex<<","<<m_startTime<<","<<m_stopTime<<","<<commtime<<"\n";
+            iofile.close();
+        }
+        else assert(0);
+    }
+
+	if ( m_loopIndex == iterations ) {
+        if ( 0 == rank() ) {
+            output( "%s: ranks %d, iterations %d done\n",
+                    getMotifName().c_str(), size(), iterations);
+        }
+        return true;
+    }
+
+
     if( 0 == m_loopIndex) {
         verbose(CALL_INFO, 1, 0, "rank=%d size=%d\n", rank(),size());
+
+		//
+		enQ_compute( evQ, m_wait2start );
     }
+
+	// NASLU starts below
+	enQ_getTime( evQ, &m_startTime );
 
 	// Sweep from (0, 0) outwards towards (Px, Py)
 	for(uint32_t i = 0; i < nz; i+= nzblock) {
@@ -123,9 +180,15 @@ bool EmberNASLUGenerator::generate( std::queue<EmberEvent*>& evQ)
 		}
 	}
 
-	if ( ++m_loopIndex == iterations ) {
-        return true;
-    } else {
-        return false;
-    }
+	//
+	enQ_getTime( evQ, &m_stopTime );
+
+	++m_loopIndex;
+	return false;
+
+	// if ( ++m_loopIndex == iterations ) {
+    //     return true;
+    // } else {
+    //     return false;
+    // }
 }

@@ -1,5 +1,9 @@
 import sys
 
+#yao
+import copy
+import os
+
 class Buffer:
     def __init__(self):
         self.buffer = ''
@@ -17,6 +21,9 @@ class Buffer:
 class ParseLoadFile:
 
     def __init__( self, filename, fileVars ):
+
+        print('reading load file: ', os.getcwd(), filename)
+
         self.fp = open(filename, 'r')
         self.buffer = Buffer()
         self.preprocess( fileVars )

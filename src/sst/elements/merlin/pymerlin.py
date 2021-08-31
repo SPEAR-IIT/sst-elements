@@ -750,14 +750,15 @@ class topoFatTree(Topo):
 #        print("Instancing router " + str(rtr_id))
 
 
-
-
-
 class topoDragonFly(Topo):
     def __init__(self):
         Topo.__init__(self)
         self.topoKeys = ["topology", "debug", "num_ports", "flit_size", "link_bw", "xbar_bw", "dragonfly:hosts_per_router", "dragonfly:routers_per_group", "dragonfly:intergroup_per_router", "dragonfly:num_groups","dragonfly:intergroup_links","input_latency","output_latency","input_buf_size","output_buf_size","dragonfly:global_route_mode"]
         self.topoOptKeys = ["xbar_arb","link_bw:host","link_bw:group","link_bw:global","input_latency:host","input_latency:group","input_latency:global","output_latency:host","output_latency:group","output_latency:global","input_buf_size:host","input_buf_size:group","input_buf_size:global","output_buf_size:host","output_buf_size:group","output_buf_size:global","num_vns","vn_remap","vn_remap_shm","portcontrol:output_arb","portcontrol:arbitration:qos_settings","portcontrol:arbitration:arb_vns","portcontrol:arbitration:arb_vcs"]
+
+        ##yao, this is for hr_router
+        self.topoKeys.append("stats_startat")
+
         self.global_link_map = None
         self.global_routes = "absolute"
 
@@ -776,7 +777,6 @@ class topoDragonFly(Topo):
         _params["dragonfly:num_groups"] = int(_params["dragonfly:num_groups"])
         _params["num_peers"] = _params["dragonfly:hosts_per_router"] * _params["dragonfly:routers_per_group"] * _params["dragonfly:num_groups"]
         _params["dragonfly:global_route_mode"] = self.global_routes
-
 
         self.total_intergroup_links = (_params["dragonfly:num_groups"] - 1) * _params["dragonfly:intergroup_links"]
         _params["dragonfly:intergroup_per_router"] = int((self.total_intergroup_links + _params["dragonfly:routers_per_group"] - 1 ) // _params["dragonfly:routers_per_group"])
@@ -844,8 +844,8 @@ class topoDragonFly(Topo):
                     self.global_link_map[i*igpr+j] = count;
                     count = count + 1
 
-        #print("Global link map array")
-        #print(self.global_link_map)
+        print("Global link map array")
+        print(self.global_link_map)
 
         # End set global link map with default
 
@@ -889,6 +889,11 @@ class topoDragonFly(Topo):
 
         _topo_params = _params.subsetWithRename(swap_keys);
 
+        ##yao pass additional params
+        _topo_params.update( _params.subset(
+            ["link_lat_local", "link_lat_global",], 
+            ["learning_rate", "learning_rate2", "save_qtable", "load_qtable", "pathToQtableFile", "max_hops", "epsilon", "qtable_bcast", "qbcastThsld", "qbcastPerid", "qtable_row_type", "src_group_q", "src_mid_group_q", "save_qtable_time", "q_threshold1", "q_threshold2", "perid_func"] )) 
+    
         router_num = 0
         nic_num = 0
         # GROUPS
@@ -916,7 +921,13 @@ class topoDragonFly(Topo):
                         link = sst.Link("link:g%dr%dh%d"%(g, r, p))
                         if self.bundleEndpoints:
                             link.setNoCut()
-                        link.connect(ep, (rtr, "port%d"%port, _params["link_lat"]) )
+
+                        #yao, maybe want to seperate link latency
+                        # if _params["link_lat_host"]:
+                        link.connect(ep, (rtr, "port%d"%port, _params["link_lat_host"]) )
+                        # else:
+                            # link.connect(ep, (rtr, "port%d"%port, _params["link_lat"]) )
+
                     nic_num = nic_num + 1
                     port = port + 1
 
@@ -924,13 +935,25 @@ class topoDragonFly(Topo):
                     if p != r:
                         src = min(p,r)
                         dst = max(p,r)
-                        rtr.addLink(getLink("link:g%dr%dr%d"%(g, src, dst)), "port%d"%port, _params["link_lat"])
+
+                        #yao
+                        # if _params["link_lat_local"]:
+                        rtr.addLink(getLink("link:g%dr%dr%d"%(g, src, dst)), "port%d"%port, _params["link_lat_local"])
+                        # else:
+                            # rtr.addLink(getLink("link:g%dr%dr%d"%(g, src, dst)), "port%d"%port, _params["link_lat"])
+
                         port = port + 1
 
                 for p in range(_params["dragonfly:intergroup_per_router"]):
                     link = getGlobalLink(g,r,p)
                     if link is not None:
-                        rtr.addLink(link,"port%d"%port, _params["link_lat"])
+
+                        #yao 
+                        # if _params["link_lat_global"]:
+                        rtr.addLink(link,"port%d"%port, _params["link_lat_global"])
+                        # else:
+                            # rtr.addLink(link,"port%d"%port, _params["link_lat"])
+
                     port = port +1
 
                 router_num = router_num +1
@@ -1106,7 +1129,11 @@ class OfferedLoadEndPoint(EndPoint):
         nic.addParam("id", nID)
         if self.enableAllStats:
             nic.enableAllStatistics({"type":"sst.AccumulatorStatistic", "rate":self.statInterval})
-        return (nic, "rtr", _params["link_lat"])
+
+        # if _params["link_lat_host"]:
+        return (nic, "rtr", _params["link_lat_host"])
+        # else:
+            # return (nic, "rtr", _params["link_lat"])
         #print("Created Endpoint with id: %d, and params: %s %s\n"%(nID, _params.subset(self.nicKeys), _params.subset(extraKeys)))
 
     def enableAllStatistics(self,interval):
@@ -1162,6 +1189,7 @@ class TrafficGenEndPoint(EndPoint):
         self.epOptKeys.extend("checkerboard")
         self.epOptKeys.extend(self.optionalKeys)
         self.nicKeys = []
+
     def getName(self):
         return "Pattern-based traffic generator"
     def prepParams(self):
@@ -1187,9 +1215,35 @@ class TrafficGenEndPoint(EndPoint):
             self.nicKeys.append("PacketDest:Exponential:Lambda")
         elif _params["PacketDest:pattern"] == "Uniform":
             pass
+
+        #yao for tornado pattern
+        elif _params["PacketDest:pattern"] == "Tornado":
+            self.nicKeys.append("dragonfly:hosts_per_router")
+            self.nicKeys.append("dragonfly:routers_per_group")
+            self.nicKeys.append("dragonfly:num_groups")
+
+        elif _params["PacketDest:pattern"] == "TornadoURmix":
+            self.nicKeys.append("dragonfly:hosts_per_router")
+            self.nicKeys.append("dragonfly:routers_per_group")
+            self.nicKeys.append("dragonfly:num_groups")
+            self.nicKeys.append("tornadoUrMixThreshold")
+
         else:
-            print("Unknown pattern" + _params["PacketDest:pattern"])
+            print("Pymerlin, Unknown pattern " + _params["PacketDest:pattern"])
             sys.exit(1)
+
+        #yao this file is not used. Look at pymerlin-endpoint.py
+        # print('PacketDelay:pattern: ', _params["PacketDelay:pattern"])
+        # if _params["PacketDelay:pattern"] == "Step":
+
+        #     print('using step: ', _params["PacketDelay:pattern"] )
+
+        #     self.nicKeys.append("PacketDelay:packet_delay_list")
+        #     self.nicKeys.append("PacketDelay:packet_num_list")
+        # else:
+        #     print("Pymerlin, TrafficGen, packet delay pattern unspecified")
+        #     sys.exit(1)
+
 
     def build(self, nID, extraKeys):
         nic = sst.Component("TrafficGen.%d"%nID, "merlin.trafficgen")
@@ -1207,9 +1261,29 @@ class TrafficGenEndPoint(EndPoint):
         #    if k in _params:
         #        nic.addParam(k, _params[k])
         nic.addParam("id", nID)
+
+        # #yao, tornado needs these values
+        # if "dragonfly" in _params["topology"]:
+        #     # print("Dragonfly found", _params["topology"])
+
+        #     # print("nicKeys ", type(self.nicKeys))
+        #     # print(self.nicKeys)
+
+        #     tmp_keys = ["dragonfly:hosts_per_router", "dragonfly:routers_per_group", "dragonfly:num_groups", 'tornadoUrMixThreshold']
+        #     nic.addParams(_params.subset(tmp_keys))
+        # # ==>|yao
+
+
         if self.enableAllStats:
             nic.enableAllStatistics({"type":"sst.AccumulatorStatistic", "rate":self.statInterval})
-        return (linkif, "rtr_port", _params["link_lat"])
+        # return (linkif, "rtr_port", _params["link_lat"])
+
+        #yao
+        # if _params["link_lat_host"]:
+        return (linkif, "rtr_port", _params["link_lat_host"])
+        # else:
+            # return (linkif, "rtr_port", _params["link_lat"])
+
 
     def enableAllStatistics(self,interval):
         self.enableAllStats = True;

@@ -13,48 +13,40 @@
 // information, see the LICENSE file in the top level directory of the
 // distribution.
 
-
-#ifndef _H_EMBER_HALO_3D_BLOCKING
-#define _H_EMBER_HALO_3D_BLOCKING
+// yao
+// updated from Halo3D Motif
+#ifndef _H_EMBER_STENCIL_ND_BLOCKING
+#define _H_EMBER_STENCIL_ND_BLOCKING
 
 #include "mpi/embermpigen.h"
 
-//
+//yao
 #include <sys/stat.h>
 #include <fstream>
 
 namespace SST {
 namespace Ember {
 
-class EmberHalo3DGenerator : public EmberMessagePassingGenerator {
+class EmberStencilNdGenerator : public EmberMessagePassingGenerator {
 
 public:
     SST_ELI_REGISTER_SUBCOMPONENT_DERIVED(
-        EmberHalo3DGenerator,
+        EmberStencilNdGenerator,
         "ember",
-        "Halo3DMotif",
+        "StencilNdMotif",
         SST_ELI_ELEMENT_VERSION(1,0,0),
-        "Performs a 3D blocking motif",
+        "Stencil Nd motif",
         SST::Ember::EmberGenerator
     )
 
     SST_ELI_DOCUMENT_PARAMS(
-        {   "arg.nx",           "Sets the problem size in X-dimension",         "100"},
-        {   "arg.ny",           "Sets the problem size in Y-dimension",         "100"},
-        {   "arg.nz",           "Sets the problem size in Z-dimension",         "100"},
-        {   "arg.pex",          "Sets the processors in X-dimension (0=auto)",      "0"},
-        {   "arg.pey",          "Sets the processors in Y-dimension (0=auto)",      "0"},
-        {   "arg.pez",          "Sets the processors in Z-dimension (0=auto)",      "0"},
+        {   "arg.gridsize",  "performs a N d stencil pattern", "[1,1,1,1,1]"},
         {   "arg.fields_per_cell",  "Specify how many variables are being computed per cell (this is one of the dimensions in message size. Default is 1", "1"},
         {   "arg.doreduce",     "How often to do reduces, 1 = each iteration",      "1"},
         {   "arg.datatype_width",   "Specify the size of a single variable, single grid point, typically 8 for double, 4 for float, default is 8 (double). This scales message size to ensure byte count is correct.", "8"},
-        {   "arg.peflops",      "Sets the FLOP/s rate of the processor (used to calculate compute time if not supplied, default is 10000000000 FLOP/s)", "10000000000"},
-        {   "arg.flopspercell",     "Sets the number of number of floating point operations per cell, default is 26 (27 point stencil)",    "26"},
         {   "arg.computetime",      "Sets the number of nanoseconds to compute for",    "10"},
-        {   "arg.copytime",     "Sets the time spent copying data between messages",    "5"},
         {   "arg.iterations",       "Sets the number of halo3d operations to perform",  "10"},
-
-        //
+        //yao
         {   "arg.wait2start",      "wait how long to start?",        "1"}, 
     )
 
@@ -84,45 +76,39 @@ public:
 
 
 public:
-	EmberHalo3DGenerator(SST::ComponentId_t, Params& params);
-	~EmberHalo3DGenerator() {}
-	//
+	EmberStencilNdGenerator(SST::ComponentId_t, Params& params);
+	~EmberStencilNdGenerator() {}
+	//yao
     // void configure();
     void configure(Params& params);
 	bool generate( std::queue<EmberEvent*>& evQ );
 
 private:
+
+    void lex_coords( std::vector<int>& coords, std::vector<int>& size, const uint32_t rank);
+    int lex_rank(const std::vector<int>& coords, const std::vector<int>& size);
+    void neighbor_coords(const std::vector<int>& coords, std::vector<int>& n_coords, const int dim, const int offset);
+
 	uint32_t m_loopIndex;
-
 	bool performReduction;
+    uint32_t iterations;
 
-	uint32_t iterations;
-
-	// Share these over all instances of the motif
-	uint32_t peX;
-	uint32_t peY;
-	uint32_t peZ;
-
+    //yao
+    int stencildim;
+    std::vector<int> gridsize;
+    std::vector<int> mycoord;
 	uint32_t nsCompute;
-	uint32_t nsCopyTime;
-
-	uint32_t nx;
-	uint32_t ny;
-	uint32_t nz;
 	uint32_t items_per_cell;
 	uint32_t sizeof_cell;
+    std::vector<int> posneighbors;
+    std::vector<int> negneighbors;
 
-	int32_t  x_down;
-	int32_t  x_up;
-	int32_t  y_down;
-	int32_t  y_up;
-	int32_t  z_down;
-	int32_t  z_up;
     int jobId; //NetworkSim
 	uint64_t m_startTime;  //NetworkSim
     uint64_t m_stopTime;  //NetworkSim
 
-    //
+    //yao
+    std::string motifname;
     uint64_t m_wait2start;
     std::string outfile; //IO file 
 

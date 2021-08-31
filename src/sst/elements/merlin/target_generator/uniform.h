@@ -57,9 +57,11 @@ public:
 
     UniformDist(ComponentId_t cid, Params &params, int id, int num_peers) :
         TargetGenerator(cid)
-    {
+    {   
         min = params.find<int>("min",0);
-        max = params.find<int>("max",num_peers - 1);
+        // max = params.find<int>("max",num_peers - 1);
+        // yao   
+        max = params.find<int>("max",num_peers);        
 
         gen = new MersenneRNG(id);
 

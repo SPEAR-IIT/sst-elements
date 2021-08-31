@@ -30,7 +30,8 @@ namespace Merlin {
 ReorderLinkControl::ReorderLinkControl(ComponentId_t cid, Params &params, int vns) :
     SimpleNetwork(cid),
     receiveFunctor(NULL),
-    vns(vns)
+    vns(vns),
+    pktcount(0) // yao
 {
     if ( isUser() ) {
         // Need to see if the network_if was loaded as a user subcomponent
@@ -142,6 +143,10 @@ bool ReorderLinkControl::send(SimpleNetwork::Request* req, int vn) {
     // info->send++;
 
     // std::cout << id << ": sending packet with sequence number " << my_req->seq << std::endl;
+
+    if ( my_req->getTraceID() == 0 ){
+        my_req->setTraceID( pktcount++ );
+    }
 
     return link_control->send(my_req, vn);
 }

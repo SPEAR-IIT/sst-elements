@@ -19,6 +19,10 @@
 
 #include "mpi/embermpigen.h"
 
+//
+#include <sys/stat.h>
+#include <fstream>
+
 namespace SST {
 namespace Ember {
 
@@ -49,6 +53,9 @@ public:
         {   "arg.peflops",      "Sets the FLOP/s rate of the processor (used to calculate compute time if not supplied, default is 10000000000 FLOP/s)", "10000000000"},
         {   "arg.copytime",     "Sets the time spent copying data between messages",    "5"},
         {   "arg.iterations",       "Sets the number of ping pong operations to perform",   "10"},
+
+        //
+        {   "arg.wait2start",      "wait how long to start?",        "1"}, 
     )
 
     SST_ELI_DOCUMENT_STATISTICS(
@@ -132,6 +139,13 @@ private:
 	int32_t  corner_f;
 	int32_t  corner_g;
 	int32_t  corner_h;
+
+        //
+    uint64_t m_startTime;  //NetworkSim
+    uint64_t m_stopTime;  //NetworkSim
+    uint64_t m_commstartTime;
+    uint64_t m_wait2start;
+    std::string outfile; //IO file 
 };
 
 }

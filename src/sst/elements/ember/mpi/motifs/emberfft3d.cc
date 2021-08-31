@@ -32,11 +32,17 @@ EmberFFT3DGenerator::EmberFFT3DGenerator(SST::ComponentId_t id, Params& params) 
 	m_backwardStop(0),
 	m_forwardTotal(0),
 	m_backwardTotal(0),
-    m_transCostPer(6)
+    m_transCostPer(6),
+    //
+    m_startTime(0),
+    m_stopTime(0)
 {
 	m_data.np0 = params.find<uint32_t>("arg.nx", 100);
 	m_data.np1  = params.find<uint32_t>("arg.ny", 100);
 	m_data.np2  = params.find<uint32_t>("arg.nz", 100);
+
+        //
+    m_wait2start = (uint64_t) params.find("arg.wait2start", 1);
 
     assert( m_data.np0 == m_data.np1 );
     assert( m_data.np1 == m_data.np2 );
@@ -56,6 +62,41 @@ EmberFFT3DGenerator::EmberFFT3DGenerator(SST::ComponentId_t id, Params& params) 
     m_transCostPer[5] = params.find<float>("arg.bwd_fft3",1);
 
 	configure();
+
+    // IO
+    mkdir("./ember_stats/" ,0755);
+    outfile = "./ember_stats/emberFFT3D_rank" + std::to_string(rank()) + "_" + std::to_string(size()) + ".stats";
+    FILE *file = fopen(outfile.c_str(), "w");
+    fprintf(file, "rank,ite,start(ns),stop(ns),comm(ns)");
+    //init time and print col names
+    for(int i=0; i<12; i++){
+        comm_time[i] = 0;
+        fprintf(file, ",stamp%d",i);
+    }
+    fprintf(file, "\n");
+    fclose(file);
+
+    if(0 == rank()){
+        output( "------------------------------------\n");
+        output( "EmberFFT3D %d ranks\n", size());
+        output( "EmberFFT3D %u its\n", m_iterations);
+        output( "EmberFFT3D prob size: %d %d %d, nprow %d\n", m_data.np0, m_data.np1, m_data.np2, m_data.nprow );
+        output( "EmberFFT3D wait2start: %lu ns \n", m_wait2start);
+
+        output( "EmberFFT3D rank 0 msg size:\n");
+        for ( unsigned i = 0; i < m_data.npcol; i++ ) {
+            output("row, sendblk=%d "
+                    "recvblk=%d\n",m_rowSendCnts[i], m_rowRecvCnts[i]);
+        }
+        for ( unsigned i = 0; i < m_data.nprow; i++ ) {
+            output("col_f, sendblk=%d "
+                    "recvblk=%d\n",m_colSendCnts_f[i],m_colRecvCnts_f[i]);
+        }
+        for ( unsigned i = 0; i < m_data.nprow; i++ ) {
+            output("col_b, sendblk=%d "
+                    "recvblk=%d\n", m_colSendCnts_b[i], m_colRecvCnts_b[i]);
+        }
+    }
 }
 
 void EmberFFT3DGenerator::configure()
@@ -286,17 +327,45 @@ void EmberFFT3DGenerator::initTimes( int numPe, int x, int y, int z, float nsPer
 
 bool EmberFFT3DGenerator::generate( std::queue<EmberEvent*>& evQ )
 {
-    verbose(CALL_INFO, 1, 0, "loop=%d\n", m_loopIndex );
+    verbose(CALL_INFO, 1, 0, "Node %d, loop=%d\n", rank(), m_loopIndex );
 
     m_forwardTotal += (m_forwardStop - m_forwardStart);
     m_backwardTotal += (m_backwardStop - m_forwardStop);
 
+    // time unit is nanosec, print progress
+    uint64_t commtime = 0;
+    for (int i = 0; i<12/2; i++){
+        commtime += ( comm_time[2*i+1] - comm_time[2*i] );
+    }
+
+    if(rank()==0){
+        printf("\t\tEmberFFT3D rank%d, ite %d, start %lu, end %lu @ %lu\n", rank(), m_loopIndex, m_startTime, m_stopTime, getCurrentSimTimeNano() );
+    }
+
+    if(m_loopIndex>0){
+        std::ofstream iofile;
+        iofile.open(outfile.c_str(), std::ios::app);
+        if (iofile.is_open())
+        {
+            iofile <<rank()<<","<<m_loopIndex<<","<<m_startTime<<","<<m_stopTime<<","<<commtime;
+
+            for (int i=0; i<12; i++){
+                iofile<<","<<comm_time[i];
+            }
+            iofile<<"\n";
+            iofile.close();
+        }
+        else assert(0);
+    }
+    
     if (  m_loopIndex == (signed) m_iterations ) {
         if ( 0 == rank() ) {
-            output("%s: nRanks=%d fwd time %f sec\n", getMotifName().c_str(), size(),
-                ((double) m_forwardTotal / 1000000000.0) / m_iterations );
-            output("%s: rRanks=%d bwd time %f sec\n", getMotifName().c_str(), size(),
-                ((double) m_backwardTotal / 1000000000.0) / m_iterations );
+            // output("%s: nRanks=%d fwd time %f sec\n", getMotifName().c_str(), size(),
+            //     ((double) m_forwardTotal / 1000000000.0) / m_iterations );
+            // output("%s: rRanks=%d bwd time %f sec\n", getMotifName().c_str(), size(),
+            //     ((double) m_backwardTotal / 1000000000.0) / m_iterations );
+
+            output("\t%s, %d iterations done\n", getMotifName().c_str(), m_loopIndex);
         }
         return true;
     }
@@ -308,43 +377,80 @@ bool EmberFFT3DGenerator::generate( std::queue<EmberEvent*>& evQ )
         return false;
     }
 
+    // wait 2 start
+    if ( 0 == m_loopIndex ) {
+        enQ_compute( evQ, m_wait2start );
+    }
+
+    // FFT3D iterations starts here
+    enQ_getTime( evQ, &m_startTime );
+
     enQ_getTime( evQ, &m_forwardStart );
 
     enQ_compute( evQ, (uint64_t) ((double) calcFwdFFT1() ) );
+
+    // record comm time
+    enQ_getTime( evQ, comm_time + 0);
 
     enQ_alltoallv( evQ,
                 m_sendBuf, &m_colSendCnts_f[0], &m_colSendDsp_f[0], DOUBLE,
                 m_recvBuf, &m_colRecvCnts_f[0], &m_colRecvDsp_f[0], DOUBLE,
                 m_colComm );
 
+    enQ_getTime( evQ, comm_time + 1);
+
     enQ_compute( evQ, (uint64_t) ((double) calcFwdFFT2() ) );
+
+    enQ_getTime( evQ, comm_time + 2);
 
     enQ_alltoallv( evQ, m_sendBuf, &m_rowSendCnts[0], &m_rowSendDsp[0], DOUBLE,
                         m_recvBuf, &m_rowRecvCnts[0], &m_rowRecvDsp[0], DOUBLE,
                         m_rowComm );
 
+    enQ_getTime( evQ, comm_time + 3);
+
     enQ_compute( evQ, (uint64_t) ((double) calcFwdFFT3()  ) );
 
+    enQ_getTime( evQ, comm_time + 4);
+    
     enQ_barrier( evQ, GroupWorld );
+
+    enQ_getTime( evQ, comm_time + 5);
+
     enQ_getTime( evQ, &m_forwardStop );
 
     enQ_compute( evQ, (uint64_t) ((double) calcBwdFFT1() ) );
 
+    enQ_getTime( evQ, comm_time + 6);
+
     enQ_alltoallv( evQ, m_sendBuf, &m_rowSendCnts[0], &m_rowSendDsp[0], DOUBLE,
                         m_recvBuf, &m_rowRecvCnts[0], &m_rowRecvDsp[0], DOUBLE,
                         m_rowComm );
 
+    enQ_getTime( evQ, comm_time + 7);
+
     enQ_compute( evQ, (uint64_t) ((double) calcBwdFFT2() ) );
+
+    enQ_getTime( evQ, comm_time + 8);
 
     enQ_alltoallv( evQ,
                 m_sendBuf, &m_colSendCnts_b[0], &m_colSendDsp_b[0], DOUBLE,
                 m_recvBuf, &m_colRecvCnts_b[0], &m_colRecvDsp_b[0], DOUBLE,
                 m_colComm );
 
+    enQ_getTime( evQ, comm_time + 9);
+
     enQ_compute( evQ, (uint64_t) ((double) calcBwdFFT3() ) );
 
+    enQ_getTime( evQ, comm_time + 10);
+
     enQ_barrier( evQ, GroupWorld );
+
+    enQ_getTime( evQ, comm_time + 11);
+
     enQ_getTime( evQ, &m_backwardStop );
+
+    enQ_getTime( evQ, &m_stopTime );
 
     if ( ++m_loopIndex == (signed) m_iterations ) {
         enQ_commDestroy( evQ, m_rowComm );

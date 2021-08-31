@@ -51,6 +51,9 @@
 
 #include "mpi/embermpigen.h"
 
+#include <sys/stat.h>
+#include <fstream>
+
 namespace SST {
 namespace Ember {
 
@@ -74,6 +77,8 @@ public:
         { "arg.peflops", "Processor element flops per second", "1000000000000"},
         { "arg.computetime", "", ""},
         { "arg.iterations",	"Sets the number of ping pong operations to perform", 	"1"},
+        //
+        {   "arg.wait2start",      "wait how long to start?",        "1"}, 
     )
 
     SST_ELI_DOCUMENT_STATISTICS(
@@ -152,6 +157,23 @@ private:
     int squaresize[4];	   /* dimensions of hypercubes */
     int nsquares[4];	           /* number of hypercubes in each direction */
     int machine_coordinates[4]; /* logical machine coordinates */
+
+    //
+    uint64_t m_wait2start;
+
+    SimTime_t t_ite_start;
+    SimTime_t t_ite_end;
+    SimTime_t t_parity_start[2];
+    SimTime_t t_parity_end[2];
+    SimTime_t t_parity_start2[2];
+    SimTime_t t_parity_end2[2];
+    SimTime_t t_all_reduce1_start;
+    SimTime_t t_all_reduce1_end;
+    SimTime_t t_all_reduce2_start;
+    SimTime_t t_all_reduce2_end;
+
+    std::string outfile; //IO file 
+
 };
 
 }
