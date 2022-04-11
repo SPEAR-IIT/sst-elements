@@ -398,7 +398,7 @@ topo_dragonfly::topo_dragonfly(ComponentId_t cid, Params &p, int num_ports, int 
             vns[i].num_vcs = 2;
         }
 
-        else if ( !vn_route_algos[i].compare("q-routing1") ) {
+        else if ( !vn_route_algos[i].compare("q-adaptive") ) {
             vns[i].algorithm = Q1;
             if(src_group_q){
                 assert(!src_mid_group_q);
