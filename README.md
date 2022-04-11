@@ -2,19 +2,32 @@
 
 # Structural Simulation Toolkit (SST)
 
-#### Copyright (c) 2009-2021, National Technology and Engineering Solutions of Sandia, LLC (NTESS)
-Portions are copyright of other developers:
-See the file CONTRIBUTORS.TXT in the top level directory
-of this repository for more information.
-
----
-
-The Structural Simulation Toolkit (SST) was developed to explore innovations in highly concurrent systems where the ISA, microarchitecture, and memory interact with the programming model and communications system. The package provides two novel capabilities. The first is a fully modular design that enables extensive exploration of an individual system parameter without the need for intrusive changes to the simulator. The second is a parallel simulation environment based on MPI. This provides a high level of performance and the ability to look at large systems. The framework has been successfully used to model concepts ranging from processing in memory to conventional processors connected by conventional network interfaces and running MPI.
-
----
-
+#### This is a fork from the official [SST Github page](https://github.com/sstsimulator/sst-elements) with implementations maintained by [SPEAR group](http://www.cs.iit.edu/~zlan/) at IIT.  
 Visit [sst-simulator.org](http://sst-simulator.org) to learn more about SST.
 
-See [Contributing](https://github.com/sstsimulator/sst-elements/blob/devel/CONTRIBUTING.md) to learn how to contribute to SST.
+---
+## Study of Workload Interference with Intelligent Routing on Dragonfly
+
+This branch contains the SST enhancement for Dragonfly network interference study
+
+### Installation
+Follow [installation guide](http://sst-simulator.org/SSTPages/SSTBuildAndInstall_11dot1dot0_SeriesDetailedBuildInstructions/) to install SST.
+
+### Run a test
+
+```bash
+cd tests/
+./dragonfly_interference.sh
+```
+
+#### Note
+**tests/dragonfly_interference.sh** will launch a CosmoFlow-UR pairwise simulation using Q-adaptive routing.
+
+The **SST_SRC** variable needs to be updated to point the directory containing sst-element source code
+
+---
+
+
+
 
 ##### [LICENSE](https://github.com/sstsimulator/sst-elements/blob/devel/LICENSE)
