@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -39,7 +39,7 @@ ProsperoComponent::ProsperoComponent(ComponentId_t id, Params& params) :
 	    std::string traceModule = params.find<std::string>("reader", "prospero.ProsperoTextTraceReader");
 	    output->verbose(CALL_INFO, 1, 0, "Reader module is: %s\n", traceModule.c_str());
 
-	    Params readerParams = params.find_prefix_params("readerParams.");
+	    Params readerParams = params.get_scoped_params("readerParams");
 	    reader = loadAnonymousSubComponent<ProsperoTraceReader>(traceModule, "reader", 0, ComponentInfo::INSERT_STATS, readerParams, output);
 
 	}

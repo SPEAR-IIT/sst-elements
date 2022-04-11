@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -16,7 +16,7 @@
 class VirtNic {
         Nic& m_nic;
       public:
-        VirtNic(Nic& nic, int _id, std::string portName) : m_nic(nic), id(_id)
+        VirtNic(Nic& nic, int _id, std::string portName, SimTime_t delay) : m_nic(nic), id(_id), m_msgHostDelay( delay )
         {
             std::ostringstream tmp;
             tmp <<  id;
@@ -40,7 +40,7 @@ class VirtNic {
         }
 
 		void send( SST::Event * event ) {
-			m_toCoreLink->send( 149, event );
+			m_toCoreLink->send( m_msgHostDelay, event );
 		}
 
 		void sendShmem( SimTime_t delay, SST::Event * event ) {
@@ -50,6 +50,7 @@ class VirtNic {
 
         Link* m_toCoreLink;
         int id;
+        SimTime_t m_msgHostDelay;
         void notifyRecvDmaDone( int src_vNic, int src, int tag, size_t len,
                                                             void* key ) {
             send( new NicRespEvent( NicRespEvent::DmaRecv, src_vNic,

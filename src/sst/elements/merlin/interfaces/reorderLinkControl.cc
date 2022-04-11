@@ -1,8 +1,8 @@
-// Copyright 2013-2020 NTESS. Under the terms
+// Copyright 2013-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2013-2020, NTESS
+// Copyright (c) 2013-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -50,7 +50,7 @@ ReorderLinkControl::ReorderLinkControl(ComponentId_t cid, Params &params, int vn
     std::string networkIF = params.find<std::string>("networkIF", "merlin.linkcontrol");
 
     // Get the params for the child
-    Params childParams = params.find_prefix_params("networkIF");
+    Params childParams = params.get_scoped_params("networkIF");
     if ( childParams.size() == 0 ) {
         // Not using new method of passing through parameters, just
         // send all params to child

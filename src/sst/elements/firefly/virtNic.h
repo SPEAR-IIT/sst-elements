@@ -1,9 +1,9 @@
 
-// Copyright 2013-2020 NTESS. Under the terms
+// Copyright 2013-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2013-2020, NTESS
+// Copyright (c) 2013-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -48,8 +48,9 @@ class VirtNic : public SST::SubComponent {
     )
     
     SST_ELI_DOCUMENT_PARAMS(
-        {"debugLevel", "Sets the output verbosity of the component", "1"},
-        {"debug", "Sets the messaging API of the end point", "0"},
+        {"verboseLevel","Sets the level of output","0"},
+        {"maxNicQdepth","Sets maximum number of entries before blocking","32"},
+        {"latPerSend_ns","Sets the time each send takes","2"},
         {"portName", "Sets the name of the port for the link", "nic"},
     )
 
@@ -218,6 +219,17 @@ class VirtNic : public SST::SubComponent {
     }
 
   private:
+
+	SimTime_t m_nextTimeSlot;
+	uint32_t m_latPerSend_ns;
+	SimTime_t calcDelay() {
+		SimTime_t curTime = Simulation::getSimulation()->getCurrentSimCycle()/1000;
+
+		SimTime_t ret = curTime < m_nextTimeSlot ? m_nextTimeSlot - curTime: 0;	
+		m_dbg.debug(CALL_INFO,2,0,"curTime_ns=%" PRIu64 " delay_ns=%" PRIu64"\n",curTime,ret);
+		m_nextTimeSlot += m_latPerSend_ns;
+		return ret;
+	}
 
     void sendCmd( SimTime_t delay ,Event* ev) {
 		m_dbg.debug(CALL_INFO,2,0,"%d %d\n", m_curNicQdepth, m_maxNicQdepth);

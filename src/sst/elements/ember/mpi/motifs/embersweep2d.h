@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -34,11 +34,11 @@ public:
     )
 
     SST_ELI_DOCUMENT_PARAMS(
+        {   "arg.computetime",      "Sets the compute time per KBA-data block in nanoseconds", "1000"},
         {   "arg.iterations",       "Sets the number of ping pong operations to perform",   "1"},
         {   "arg.nx",           "Sets the problem size in the X-dimension", "50"},
         {   "arg.ny",           "Sets the problem size in the Y-dimension", "50"},
         {   "arg.y_block",      "Sets the Y-blocking factor (must be Ny % y_block == 0, default is 1 (no blocking))", "1"},
-        {   "arg.computetime",      "Sets the compute time per KBA-data block in nanoseconds", "1000"},
     )
 
     SST_ELI_DOCUMENT_STATISTICS(

@@ -1,8 +1,8 @@
-// Copyright 2013-2020 NTESS. Under the terms
+// Copyright 2013-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2013-2020, NTESS
+// Copyright (c) 2013-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -78,6 +78,20 @@ class FunctionSM : public SubComponent {
         "",
         SST::Firefly::FunctionSM
     )
+
+	SST_ELI_DOCUMENT_PARAMS(
+		{"verboseLevel","Sets the output level","0"},
+		{"defaultModule","Sets the component where functions reside","firefly"},
+		{"defaultEnterLatency","Sets the default latency to enter a function","0"},
+		{"defaultReturnLatency","Sets the default latency to return from a function","0"},
+		{"smallCollectiveVN","Sets the VN to use for small collectives","0"},
+		{"smallCollectiveSize","Sets the size of small collectives","0"},
+		{"nodeId","Sets the node ID",""},
+	)
+	/* PARAMS
+		This component also looks for function names as the top of a parameter hierarchy such as "Fini.*"
+	*/
+
     typedef std::function<void()> Callback;
 
     enum FunctionEnum{

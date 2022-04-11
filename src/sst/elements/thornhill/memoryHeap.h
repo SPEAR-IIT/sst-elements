@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -31,6 +31,11 @@ class MemoryHeap : public Component {
         "",
         COMPONENT_CATEGORY_UNCATEGORIZED
     )
+	SST_ELI_DOCUMENT_PARAMS(
+		{"nid","Sets the node ID","-1"},
+		{"verboseLevel","Sets the output level","0"},
+		{"verboseMask","Sets the output mask","-1"},
+	)
     SST_ELI_DOCUMENT_PORTS(
         {"detailed%(num_ports)d", "Port connected to Memory Heap client", {}},
     )

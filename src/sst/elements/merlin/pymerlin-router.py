@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 #
-# Copyright 2009-2020 NTESS. Under the terms
+# Copyright 2009-2021 NTESS. Under the terms
 # of Contract DE-NA0003525 with NTESS, the U.S.
 # Government retains certain rights in this software.
 #
-# Copyright (c) 2009-2020, NTESS
+# Copyright (c) 2009-2021, NTESS
 # All rights reserved.
 #
 # Portions are copyright of other developers:
@@ -25,8 +25,8 @@ class hr_router(RouterTemplate):
         self._declareParams("params",["link_bw","flit_size","xbar_bw","input_latency","output_latency","input_buf_size","output_buf_size",
                                       "xbar_arb","network_inspectors","oql_track_port","oql_track_remote","num_vns","vn_remap","vn_remap_shm"])
 
-        self._declareParams("params",["qos_settings"],"portcontrol:arbitration:")
-        self._declareParams("params",["output_arb"],"portcontrol:")
+        self._declareParams("params",["qos_settings"],"portcontrol.arbitration.")
+        self._declareParams("params",["output_arb"],"portcontrol.")
 
         self._setCallbackOnWrite("qos_settings",self._qos_callback)
         self._subscribeToPlatformParamSet("router")

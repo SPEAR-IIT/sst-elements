@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -82,8 +82,9 @@ CoherenceController::CoherenceController(ComponentId_t id, Params &params, Param
     // Just in case, we give an initial value here
     dropPrefetchLevel_ = ((size_t) - 1);
     maxOutstandingPrefetch_ = ((size_t) - 2);
-    cachename_ = getName().c_str();
 
+    // Get parent component's name
+    cachename_ = getParentComponentName();
 
     // Register statistics - only those that are common across all coherence managers
     // Give  all array entries a default statistic so we don't end up with segfaults during execution
@@ -126,7 +127,7 @@ CoherenceController::CoherenceController(ComponentId_t id, Params &params, Param
 ReplacementPolicy* CoherenceController::createReplacementPolicy(uint64_t lines, uint64_t assoc, Params& params, bool L1, int slotnum) {
     SubComponentSlotInfo* rslots = getSubComponentSlotInfo("replacement");
     if (rslots && rslots->isPopulated(slotnum))
-        return rslots->create<ReplacementPolicy>(0, ComponentInfo::SHARE_NONE, lines, assoc);
+        return rslots->create<ReplacementPolicy>(slotnum, ComponentInfo::SHARE_NONE, lines, assoc);
 
     // Default to the replacement policy that was used before all the recent memH changes
     Params emptyparams;
@@ -728,18 +729,21 @@ void CoherenceController::removeRequestRecord(SST::Event::id_type id) {
 }
 
 void CoherenceController::recordLatencyType(Event::id_type id, int type) {
-    if (startTimes_.find(id) != startTimes_.end())
-        startTimes_.find(id)->second.missType = type;
+    auto it = startTimes_.find(id);
+    if(it != startTimes_.end())
+        it->second.missType = type;
 }
 
 void CoherenceController::recordMiss(Event::id_type id) {
-    if (startTimes_.find(id) != startTimes_.end())
-        startTimes_.find(id)->second.missType = LatType::MISS;
+    auto it = startTimes_.find(id);
+    if(it != startTimes_.end())
+        it->second.missType = LatType::MISS;
 }
 
 void CoherenceController::recordPrefetchLatency(Event::id_type id, int type) {
-    if (startTimes_.find(id) != startTimes_.end()) {
-        LatencyStat stat = startTimes_.find(id)->second;
+    auto it = startTimes_.find(id);
+    if(it != startTimes_.end()) {
+        LatencyStat stat = it->second;
         recordLatency(stat.cmd, type, timestamp_ - stat.time);
         startTimes_.erase(id);
     }

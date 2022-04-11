@@ -1,8 +1,8 @@
-// Copyright 2009-2020 Sandia Corporation. Under the terms
-// of Contract DE-NA0003525 with Sandia Corporation, the U.S.
+// Copyright 2009-2021 NTESS. Under the terms
+// of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, Sandia Corporation
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -67,14 +67,13 @@ public:
     )
 
     SST_ELI_DOCUMENT_PARAMS(
-        { "arg.iterations",	"Sets the number of ping pong operations to perform", 	"1"},
         { "arg.nx", 	    "Sets the size of a lattice site in X", "8" },
         { "arg.ny",         "Sets the size of a lattice site in Y", "8" },
         { "arg.nz",         "Sets the size of a lattice site in Z", "8" },
         { "arg.nt",         "Sets the size of a lattice site in T", "8" },
         { "arg.peflops", "Processor element flops per second", "1000000000000"},
         { "arg.computetime", "", ""},
-        {       "arg.verbose",                  "Sets the verbosity of the output", "0" },
+        { "arg.iterations",	"Sets the number of ping pong operations to perform", 	"1"},
     )
 
     SST_ELI_DOCUMENT_STATISTICS(

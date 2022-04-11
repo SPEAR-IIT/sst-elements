@@ -22,6 +22,7 @@ libmerlin_la_SOURCES = \
 	target_generator/target_generator.h \
 	target_generator/target_generator.cc \
 	target_generator/bit_complement.h \
+	target_generator/shift.h \
 	target_generator/uniform.h \
 	test/nic.h \
 	test/nic.cc \
@@ -31,8 +32,12 @@ libmerlin_la_SOURCES = \
 	test/pt2pt/pt2pt_test.cc \
 	test/bisection/bisection_test.h \
 	test/bisection/bisection_test.cc \
+	test/simple_patterns/empty.h \
+	test/simple_patterns/empty.cc \
 	test/simple_patterns/shift.h \
 	test/simple_patterns/shift.cc \
+	test/simple_patterns/incast.h \
+	test/simple_patterns/incast.cc \
 	topology/torus.h \
 	topology/torus.cc \
 	topology/mesh.h \
@@ -41,10 +46,6 @@ libmerlin_la_SOURCES = \
 	topology/fattree.cc \
 	topology/dragonfly.h \
 	topology/dragonfly.cc \
-	topology/dragonfly_legacy.h \
-	topology/dragonfly_legacy.cc \
-	topology/dragonfly2.h \
-	topology/dragonfly2.cc \
 	topology/singlerouter.h \
 	topology/singlerouter.cc \
 	topology/hyperx.h \
@@ -80,12 +81,14 @@ libmerlin_la_SOURCES = \
 	pymerlin-endpoint.py \
 	pymerlin-router.py \
 	interfaces/pymerlin-interface.py \
+	target_generator/pymerlin-targetgen.py \
 	topology/pymerlin-topo-dragonfly.py \
 	topology/pymerlin-topo-hyperx.py \
 	topology/pymerlin-topo-fattree.py \
 	topology/pymerlin-topo-mesh.py
 
 EXTRA_DIST = \
+	tests/testsuite_default_merlin.py \
 	tests/hyperx_128_test.py \
 	tests/dragon_128_test.py \
 	tests/dragon_72_test.py \
@@ -94,8 +97,21 @@ EXTRA_DIST = \
 	tests/torus_128_test.py \
 	tests/torus_5_trafficgen.py \
 	tests/torus_64_test.py \
+	tests/dragon_128_test_fl.py \
 	tests/dragon_128_platform_test.py \
-	tests/platform_file_dragon_128.py
+	tests/dragon_128_platform_test_cm.py \
+	tests/platform_file_dragon_128.py \
+	tests/refFiles/test_merlin_dragon_128_platform_test.out \
+	tests/refFiles/test_merlin_dragon_128_platform_test_cm.out \
+	tests/refFiles/test_merlin_dragon_128_test.out \
+	tests/refFiles/test_merlin_dragon_128_test_fl.out \
+	tests/refFiles/test_merlin_dragon_72_test.out \
+	tests/refFiles/test_merlin_fattree_128_test.out \
+	tests/refFiles/test_merlin_fattree_256_test.out \
+	tests/refFiles/test_merlin_hyperx_128_test.out \
+	tests/refFiles/test_merlin_torus_128_test.out \
+	tests/refFiles/test_merlin_torus_5_trafficgen.out \
+	tests/refFiles/test_merlin_torus_64_test.out
 
 sstdir = $(includedir)/sst/elements/merlin
 nobase_sst_HEADERS = \
@@ -109,6 +125,7 @@ BUILT_SOURCES = \
 	pymerlin-endpoint.inc \
 	pymerlin-router.inc \
 	interfaces/pymerlin-interface.inc \
+	target_generator/pymerlin-targetgen.inc \
 	topology/pymerlin-topo-dragonfly.inc \
 	topology/pymerlin-topo-hyperx.inc \
 	topology/pymerlin-topo-fattree.inc \

@@ -45,7 +45,15 @@ libzodiac_la_SOURCES = \
 	zcollective.cc
 
 EXTRA_DIST = \
-	test/allreduce/allreduce.py
+	test/allreduce/allreduce.py \
+	sirius/tests/refFiles/test_Sirius_allred_128.out \
+	sirius/tests/refFiles/test_Sirius_allred_16.out \
+	sirius/tests/refFiles/test_Sirius_allred_27.out \
+	sirius/tests/refFiles/test_Sirius_allred_4x4.out \
+	sirius/tests/refFiles/test_Sirius_allred_64.out \
+	sirius/tests/refFiles/test_Sirius_allred_8x8.out \
+	sirius/tests/refFiles/test_Sirius_allred_8x8x2.out \
+	test/testsuite_default_SiriusZodiacTrace.py
 
 libzodiac_la_LDFLAGS = -module -avoid-version
 

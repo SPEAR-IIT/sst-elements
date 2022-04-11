@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -54,6 +54,14 @@ class EmberGenerator : public SubComponent {
     typedef std::queue<EmberEvent*> Queue;
 
 	SST_ELI_REGISTER_SUBCOMPONENT_API(SST::Ember::EmberGenerator)
+
+    SST_ELI_DOCUMENT_PARAMS(
+        { "primary", "is this a primary motif", "0"},
+        { "_motifNum", "used internally", "-1"},
+        { "_jobId", "used internally", "-1"},
+        { "_enginePtr", "used internally", "-1"},
+		{ "distribModule", "Sets the distribution SST module for compute modeling, default is a constant distribution of mean 1", "1.0"},
+	)
 
     EmberGenerator( ComponentId_t id, Params& params ) : SubComponent(id) { assert(0); }
     EmberGenerator( ComponentId_t id, Params& params, std::string name ="" );

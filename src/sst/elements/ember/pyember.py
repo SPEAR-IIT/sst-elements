@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 #
-# Copyright 2009-2020 NTESS. Under the terms
+# Copyright 2009-2021 NTESS. Under the terms
 # of Contract DE-NA0003525 with NTESS, the U.S.
 # Government retains certain rights in this software.
 #
-# Copyright (c) 2009-2020, NTESS
+# Copyright (c) 2009-2021, NTESS
 # All rights reserved.
 #
 # Portions are copyright of other developers:
@@ -18,253 +18,39 @@
 import sys
 import sst
 from sst.merlin.base import *
+from sst.firefly import *
 
-
-defaults = PlatformDefinition("ember-defaults")
-PlatformDefinition.registerPlatformDefinition(defaults)
-
-
-_basic_nic_defaults = {
-    "nic2host_lat" : "150ns",
-    "rxMatchDelay_ns" : 100,
-    "txDelay_ns" : 50,
-    "hostReadDelay_ns" : 200,
-    "packetSize" : "2048B",
-    "packetOverhead" : 0,
-    
-    "numVNs" : 1, # total number of VN used
-    "getHdrVN" : 0, # VN used for sending a get request
-    "getRespSmallVN" : 0, # VN used for sending a get response <= getRespSize
-    "getRespLargeVN" : 0, # VN used for sending a get response > getRespSize
-    "getRespSize" : 15000
-}
-    
-defaults.addParamSet("ember.basic_nic",_basic_nic_defaults)
-
-_embermain_defaults = {
-    'verboseMask': -1,
-    'verboseLevel': 0,
-}
-
-defaults.addParamSet("ember.main",_embermain_defaults)
-
-
-_functionsm_defaults = {
-    'verboseLevel': 0,
-    'defaultReturnLatency': 30000,
-    'defaultEnterLatency': 30000,
-    'defaultModule': 'firefly',
-    'smallCollectiveVN' : 0, # VN used for collectives <= smallCollectiveSize
-    'smallCollectiveSize' : 8,
-}
-
-defaults.addParamSet("ember.functionsm",_functionsm_defaults)
-
-_ctrl_defaults = {
-    'sendStateDelay_ps' : 0,
-    'recvStateDelay_ps' : 0,
-    'waitallStateDelay_ps' : 0,
-    'waitanyStateDelay_ps' : 0,
-    'matchDelay_ns': 150,
-    'regRegionBaseDelay_ns': 3000,
-    
-    'txMemcpyMod': 'firefly.LatencyMod',
-    'txSetupMod': 'firefly.LatencyMod',
-    'rxSetupMod': 'firefly.LatencyMod',
-    'rxMemcpyMod': 'firefly.LatencyMod',
-    
-    'regRegionPerPageDelay_ns': 100,
-    'verboseLevel': 0,
-    'sendAckDelay_ns': 0,
-    'shortMsgLength': 12000,
-    'regRegionXoverLength': 4096,
-    
-    'rendezvousVN' : 0, # VN used to send a match header that requires a get by the target
-    'ackVN' : 0,  # VN used to send an ACK back to originator after target does a get
-    
-    'pqs.verboseMask': -1,
-    'pqs.verboseLevel': 0,
-    'rxMemcpyModParams.range.0': '0-:344ps',
-    'txMemcpyModParams.range.0': '0-:344ps',
-    'txSetupModParams.range.0': '0-:130ns',
-    'rxSetupModParams.range.0': '0-:100ns',
-    'txMemcpyModParams.op': 'Mult'
-}
-
-defaults.addParamSet("ember.ctrl",_ctrl_defaults)
-
-class BasicNicConfiguration(TemplateBase):
-
-    def __init__(self):
-        TemplateBase.__init__(self)
-        #self._declareClassVariables("_nic")
-        self._declareParams("main",_basic_nic_defaults.keys())
-        # Set up default parameters
-        self._subscribeToPlatformParamSet("ember.basic_nic")
-
-
-    def build(self,nID,num_vNics):
-        nic = sst.Component("nic" + str(nID), "firefly.nic")
-        self._applyStatisticsSettings(nic)
-        #nic.addParams(self.combineParams(self.nic_defaults,self._getGroupParams("main")))
-        nic.addParams(self._getGroupParams("main"))
-        nic.addParam("nid",nID)
-        nic.addParam("num_vNics",num_vNics)
-        return nic, "rtrLink"
-
-    def getVirtNicPortName(self, index):
-        if not self._nic:
-            print("Connecting Virtual Nic to firefly.nic before it has been built")
-            sys.exit(1)
-        return 'core'+str(x)
-
-
-class FireflyOS(TemplateBase):
-    def __init__(self):
-        TemplateBase.__init__(self)
-
-    def build(self,engine,nicLink,loopLink,size,nicsPerNode,job_id,pid,lid,coreId):
-        pass
-
-class FireflyHades(FireflyOS):
-
-    def __init__(self):
-        FireflyOS.__init__(self)
-        #self._declareClassVariables(["_final_hades_params","_final_ctrl_params"])
-        self._declareParams("main",["verboseLevel","verboseMask"])
-        self._subscribeToPlatformParamSet("ember.main")
-        
-        ### functionSM variables ###
-        self._declareParamsWithUserPrefix(
-            "main",  # dictionary params will end up in
-            "functionsm", # prefix as seen by the end user
-            [ 'verboseLevel', 'defaultReturnLatency', 'defaultEnterLatency', 'defaultModule',
-              'smallCollectiveVN', 'smallCollectiveSize'],
-            "functionSM." # prefix needed in the dictionary so things get passed correctly to elements
-        )
-
-        # Subscribe to ember.functionsm platform param set.  Need to
-        # prefix the keys with functionsm so that the end use doesn't
-        # have to put it on each key entry
-        self._subscribeToPlatformParamSetAndPrefix("ember.functionsm","functionsm")
-
-        ### ctrl variables ###
-        self._declareParamsWithUserPrefix(
-            "ctrl", # dictionary params will end up in
-            "ctrl", # user visible prefix
-            [ 'sendStateDelay_ps', 'recvStateDelay_ps', 'waitallStateDelay_ps', 'waitanyStateDelay_ps', 'matchDelay_ns',
-              'regRegionBaseDelay_ns',
-              'regRegionPerPageDelay_ns', 'verboseLevel', 'sendAckDelay_ns', 'shortMsgLength',
-              'regRegionXoverLength',
-              'rendezvousVN', 'ackVN' ]
-        )
-
-        self._declareParamsWithUserPrefix(
-            "ctrl", # dictionary params will end up in
-            "ctrl", # user visible prefix
-            [ 'pqs.verboseMask', 'pqs.verboseLevel' ],
-            "pqs." # prefix needed in the dictionary so things get passed correctly to elements
-        )
-
-        # Initial the variables for the modules
-        #'txMemcpyMod', 'txSetupMod', 'rxSetupMod', 'rxMemcpyMod',
-        subs = [
-            "rxMemcpyMod",
-            "txMemcpyMod",
-            "txSetupMod",
-            "rxSetupMod",
-            "txFiniMod",
-            "rxFiniMod",
-            "rxPostMod"
-        ]
-
-        for var in subs:
-            self._declareParamsWithUserPrefix(
-                "ctrl", # dictionary params will end up in
-                "ctrl", # user visible prefix
-                [ var ]
-            )
-
-            self._declareParamsWithUserPrefix(
-                "ctrl", # dictionary params will end up in
-                "ctrl." + var + "Params", # user visible prefix
-                [ "op", "base" ]
-            )
-
-            self._declareFormattedParamsWithUserPrefix(
-                "ctrl", # dictionary params will end up in
-                "ctrl." + var + "Params", # user visible prefix
-                [ 'range.%d' ],
-                var + "ModParams.range."
-            )
-            
-        # Subscribe to ember.ctrl platform param set.  Need to
-        # prefix the keys with ctrl so that the end use doesn't
-        # have to put it on each key entry
-        self._subscribeToPlatformParamSetAndPrefix("ember.ctrl","ctrl")
-
-
-    def build(self,engine,nicLink,loopLink,size,nicsPerNode,job_id,pid,lid,coreId):
-
-        os = engine.setSubComponent( "OS", "firefly.hades" )
-
-        os.addParams(self._getGroupParams("main"))
-        os.addParam( 'numNodes', size )
-        os.addParam( 'netMapName', 'Ember' + str(job_id) )
-        os.addParam( 'netId', pid )
-        os.addParam( 'netMapId', lid )
-        os.addParam( 'netMapSize', size )
-        os.addParam( 'coreId', coreId )
-
-        virtNic = os.setSubComponent( "virtNic", "firefly.VirtNic" )
-        # For now, just use default parameters
-        #for key, value in self.driverParams.items():
-        #    if key.startswith(self.driverParams['os.name']+'.virtNic'):
-        #        key = key[key.rfind('.')+1:]
-        #        virtNic.addParam( key,value)
-
-        # prefixed by "hermesParams.ctrlMsg."
-        ctrl_params = {
-            'nicsPerNode': nicsPerNode,
-        }
-
-
-        proto = os.setSubComponent( "proto", "firefly.CtrlMsgProto" )
-        process = proto.setSubComponent( "process", "firefly.ctrlMsg" )
-
-        proto.addParams(self._getGroupParams("ctrl"))
-        proto.addParams(ctrl_params)
-        process.addParams(self._getGroupParams("ctrl"))
-        process.addParams(ctrl_params)
-        # Should figure out how to put this into the main param group
-        # object
-        process.addParam("nicsPerNode", nicsPerNode)
-
-        #nicLink.connect( (virtNic,'nic','1ns' ),(nic,'core'+str(x),'1ns'))
-        virtNic.addLink(nicLink,'nic','1ns')
-
-        #loopLink.connect( (process,'loop','1ns' ),(loopBack,'nic'+str(nodeID%self._nicsPerNode)+'core'+str(x),'1ns'))
-        process.addLink(loopLink,'loop','1ns')
-
-
-
-
-class EmberMPIJob(Job):
-    def __init__(self, job_id, num_nodes, numCores = 1, nicsPerNode = 1):
+class EmberJob(Job):
+    def __init__(self, job_id, num_nodes, apis, numCores = 1, nicsPerNode = 1):
         Job.__init__(self,job_id,num_nodes * nicsPerNode)
-        self._declareClassVariables(["_motifNum","_motifs","_numCores","_nicsPerNode","nic_configuration","_loopBackDict","_logfilePrefix","_logfileNids","os"])
+        self._declareClassVariables(["_motifNum","_motifs","_numCores","_nicsPerNode","nic","_loopBackDict","_logfilePrefix","_logfileNids","os","_apis"])
+
+        # Not needed - the subclasses will set the nic to the correct type:
+        #x = self._createPrefixedParams("nic")
+        #x._declareParams("nic",_basic_nic_defaults.keys())
+        ##x._subscribeToPlatformParamSet("nic")
+
+        # Not sure what to do with this yet
+        #x = self._createPrefixedParams("ember")
+        self._declareParamsWithUserPrefix("ember","ember",["verbose"])
+        #x._subscribeToPlatformParamSet("ember")
+
+        # Not clear what to do with this yet. Don't think we need it
+        # since it's already captured throuch ctrl params??
+        #x = self.ember._createPrefixedParams("firefly")
+
         self._numCores = numCores
         self._nicsPerNode = nicsPerNode
         self._motifNum = 0
         self._motifs = dict()
+        self._apis = apis
         self._loopBackDict = dict()
         # set default nic configuration
-        self.nic_configuration = BasicNicConfiguration()
 
-        # Set up the prefixed params
+        # Instance the OS layer and lock it (make it read only)
         self.os = FireflyHades()
         self._lockVariable("os")
-        
+
     def getName(self):
         return "EmberMPIJob"
 
@@ -305,11 +91,24 @@ class EmberMPIJob(Job):
 
 
     def build(self, nodeID, extraKeys):
+        if self._check_first_build():
+            sst.addGlobalParams("loopback_params_%s"%self._instance_name,
+                            { "numCores" : self._numCores,
+                              "nicsPerNode" : self._nicsPerNode })
 
-        nic, slot_name = self.nic_configuration.build(nodeID,self._numCores // self._nicsPerNode)
+            sst.addGlobalParams("params_%s"%self._instance_name, self._getGroupParams("ember"))
+            sst.addGlobalParam("params_%s"%self._instance_name, 'jobId', self.job_id)
+            sst.addGlobalParams("params_%s"%self._instance_name, self._motifs);
+            sst.addGlobalParams("params_%s"%self._instance_name, self._apis);
+
+        nic, slot_name = self.nic.build(nodeID,self._numCores // self._nicsPerNode)
+
+        #print( nodeID, "nic", self._getGroupParams("nic") )
+        #print( nodeID, "ember", self._getGroupParams("ember") )
+        # not needed: nic.addParams( self._getGroupParams("nic") ).  This is done already in the nic.build call
 
         # Build NetworkInterface
-        logical_id = self._nid_map.index(nodeID)
+        logical_id = self._nid_map[nodeID]
         networkif, port_name = self.network_interface.build(nic,slot_name,0,self.job_id,self.size,logical_id,False)
 
         # Store return value for later
@@ -323,16 +122,16 @@ class EmberMPIJob(Job):
         # allocation will have to be a multiple of any of the number
         # of nics per node values used.
         my_id_name = str( (nodeID // self._nicsPerNode) * self._nicsPerNode)
-        
+
         loopBackName = "loopBack" + my_id_name
         if nodeID % self._nicsPerNode == 0:
             loopBack = sst.Component(loopBackName, "firefly.loopBack")
-            loopBack.addParam( "numCores", self._numCores )
-            loopBack.addParam( "nicsPerNode", self._nicsPerNode )
+            #loopBack.addParam( "numCores", self._numCores )
+            #loopBack.addParam( "nicsPerNode", self._nicsPerNode )
+            loopBack.addGlobalParamSet("loopback_params_%s"%self._instance_name);
             self._loopBackDict[loopBackName] = loopBack
         else:
             loopBack = self._loopBackDict[loopBackName]
-
 
 
         for x in range(self._numCores // self._nicsPerNode):
@@ -340,12 +139,12 @@ class EmberMPIJob(Job):
             ep = sst.Component("nic" + str(nodeID) + "core" + str(x) + "_EmberEP", "ember.EmberEngine")
             self._applyStatisticsSettings(ep)
 
+            ep.addGlobalParamSet("params_%s"%self._instance_name )
+
             # Add the params to the EmberEngine
-            ep.addParam('jobId',self.job_id)
-            ep.addParam('api.0.module','firefly.hadesMP')
+            #ep.addParam('jobId',self.job_id)
 
             # Add the parameters defining the motifs
-            ep.addParams(self._motifs)
 
             # Check to see if we need to enable motif logging
             if self._logfilePrefix:
@@ -369,86 +168,89 @@ class EmberMPIJob(Job):
 
 
             # Create the OS layer
-            self.os.build(ep,nicLink,loopLink,self.size,self._nicsPerNode,self.job_id,nodeID,self._nid_map.index(nodeID),x)
+            self.os.build(ep,nicLink,loopLink,self.size,self._nicsPerNode,self.job_id,nodeID,logical_id,x)
 
-            """
-            os = ep.setSubComponent( "OS", "firefly.hades" )
-
-            # prefixed by "hermesParams."
-            os_params = {
-                #'detailedCompute.name': 'thornhill.SingleThread',
-                #'loadMap.0.len': 2,
-                #'nicParams.verboseLevel': 0,
-                #'nicModule': 'firefly.VirtNic',
-                'verboseLevel': 0,
-                'functionSM.defaultReturnLatency': 30000,
-                'functionSM.verboseLevel': 0,
-                'functionSM.defaultEnterLatency': 30000,
-                #'memoryHeapLink.name': 'thornhill.MemoryHeapLink',
-                #'loadMap.0.start': 0,
-            }
-
-            os.addParams(os_params)
-            os.addParams( {'numNodes': self.size} )
-            os.addParams( {'netMapName': 'Ember' + str(self.job_id) } )
-            os.addParams( {'netId': nodeID } )
-            os.addParams( {'netMapId': self._nid_map.index(nodeID) } )
-            os.addParams( {'netMapSize': self.size } )
-            os.addParams( {'coreId': x } )
-
-
-            virtNic = os.setSubComponent( "virtNic", "firefly.VirtNic" )
-            # For now, just use default parameters
-            #for key, value in self.driverParams.items():
-            #    if key.startswith(self.driverParams['os.name']+'.virtNic'):
-            #        key = key[key.rfind('.')+1:]
-            #        virtNic.addParam( key,value)
-
-            # prefixed by "hermesParams.ctrlMsg."
-            ctrl_params = {
-                'shortMsgLength': 12000,
-                'verboseLevel': 0,
-                'txMemcpyMod': 'firefly.LatencyMod',
-                'rxMemcpyMod': 'firefly.LatencyMod',
-                'matchDelay_ns': 150,
-                'txSetupMod': 'firefly.LatencyMod',
-                'rxSetupMod': 'firefly.LatencyMod',
-                'sendAckDelay_ns': 0,
-                'regRegionXoverLength': 4096,
-                'regRegionPerPageDelay_ns': 100,
-                'regRegionBaseDelay_ns': 3000,
-                "sendStateDelay_ps" : 0,
-                "recvStateDelay_ps" : 0,
-                "waitallStateDelay_ps" : 0,
-                "waitanyStateDelay_ps" : 0,
-
-                'rxMemcpyModParams.range.0': '0-:344ps',
-                'txMemcpyModParams.range.0': '0-:344ps',
-                'txSetupModParams.range.0': '0-:130ns',
-                'txMemcpyModParams.op': 'Mult',
-                'rxSetupModParams.range.0': '0-:100ns',
-                'pqs.verboseMask': -1,
-                'pqs.verboseLevel': 0,
-
-                'nicsPerNode': self._nicsPerNode,
-
-            }
-
-
-            proto = os.setSubComponent( "proto", "firefly.CtrlMsgProto" )
-            process = proto.setSubComponent( "process", "firefly.ctrlMsg" )
-
-
-            proto.addParams(ctrl_params)
-            process.addParams(ctrl_params)
-
-            #nicLink.connect( (virtNic,'nic','1ns' ),(nic,'core'+str(x),'1ns'))
-            virtNic.addLink(nicLink,'nic','1ns')
-
-            #loopLink.connect( (process,'loop','1ns' ),(loopBack,'nic'+str(nodeID%self._nicsPerNode)+'core'+str(x),'1ns'))
-            process.addLink(loopLink,'loop','1ns')
-            """
         return retval
 
 
 
+class EmberNullJob(EmberJob):
+    def __init__(self, job_id, num_nodes, numCores = 1, nicsPerNode = 1):
+        # the NULL motif does not need any API so any will statisfy the check in emberengine.cc
+        apis = { 'api.0.module':'firefly.hadesMP'}
+        EmberJob.__init__(self,job_id,num_nodes,apis,numCores,nicsPerNode)
+        self.nic = BasicNicConfiguration()
+        self._lockVariable("nic")
+        self.addMotif("Null")
+
+
+
+class EmberMPIJob(EmberJob):
+    def __init__(self, job_id, num_nodes, numCores = 1, nicsPerNode = 1):
+        apis = { 'api.0.module':'firefly.hadesMP'}
+
+        EmberJob.__init__(self,job_id,num_nodes,apis,numCores,nicsPerNode)
+
+        self.nic = BasicNicConfiguration()
+        self._lockVariable("nic")
+
+
+class EmberSimpleMemoryJob(EmberJob):
+    def __init__(self, job_id, num_nodes, apis, numCores = 1, nicsPerNode = 1):
+        EmberJob.__init__(self,job_id,num_nodes,apis,numCores,nicsPerNode)
+
+        #x = self.nic._createPrefixedParams("simpleMemoryModel")
+#        x._declareParams("nic",["verboseLevel","verboseMask","useBusBridge","useHostCache","printConfig"],"simpleMemoryModel")
+        #x._declareParams("nic",simpleMemory_params,"simpleMemoryModel")
+
+        self.nic = SimpleMemoryNicConfiguration()
+        self._lockVariable("nic")
+
+
+class EmberSHMEMJob(EmberSimpleMemoryJob):
+    def __init__(self, job_id, num_nodes, numCores = 1, nicsPerNode = 1):
+
+        apis = {'api.0.module':'firefly.hadesSHMEM',
+                'api.1.module':'firefly.hadesMisc'}
+
+        EmberSimpleMemoryJob.__init__(self,job_id,num_nodes,apis,numCores,nicsPerNode)
+
+        self._declareParamsWithUserPrefix(
+            "ember",
+            "ember.firefly.hadesSHMEM",
+            ["verboseLevel","verboseMask"],
+            "firefly.hadesSHMEM."
+        )
+
+
+class EmberFAMComputeNodeJob(EmberSHMEMJob):
+    def __init__(self, job_id, num_nodes, numCores = 1, nicsPerNode = 1):
+
+        EmberSHMEMJob.__init__(self,job_id,num_nodes,numCores,nicsPerNode)
+
+        self._declareParamsWithUserPrefix(
+            "ember",
+            "ember.firefly.hadesSHMEM.famAddrMapper",
+            ["name","bytesPerNode","numNodes","start","interval","blockSize"],
+            "firefly.hadesSHMEM.famAddrMapper."
+        )
+
+        self._declareParamsWithUserPrefix(
+            "ember",
+            "ember.firefly.hadesSHMEM.famNodeMapper",
+            ["name","firstNode","nodeStride"],
+            "firefly.hadesSHMEM.famNodeMapper."
+        )
+
+
+
+class EmberFAMNodeJob(EmberSimpleMemoryJob):
+    def __init__(self, job_id, num_nodes, numCores = 1, nicsPerNode = 1):
+        # the NULL motif does not need any API so any will statisfy the check in emberengine.cc
+        apis = { 'api.0.module':'firefly.hadesMP'}
+        EmberSimpleMemoryJob.__init__(self,job_id,num_nodes,apis,numCores,nicsPerNode)
+        #print("foobar")
+        self.addMotif("Null")
+        #self.nic._declareParams("nic",["FAM_memSize","FAM_backed"])
+        #x = self.nic._createPrefixedParams("simpleMemoryModel")
+        #x._declareParams("nic",simpleMemory_params,"simpleMemoryModel")

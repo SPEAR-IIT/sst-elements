@@ -1,10 +1,10 @@
 // -*- mode: c++ -*-
 
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -618,12 +618,12 @@ private:
 		delete gen;
 	}
 
-        int getNextValue(void)
-        {
-            for (;;) {
-                int val = (int) dist->getNextDouble();
-                if ( val < maxValue && val >= minValue ) return val;
+        int getNextValue(void) {
+            double val = -1.0;
+            while ((int)val >= maxValue || (int)val < minValue || val < 0){
+                val = dist->getNextDouble();
             }
+            return (int) val;
         }
 
         void seed(uint32_t val)

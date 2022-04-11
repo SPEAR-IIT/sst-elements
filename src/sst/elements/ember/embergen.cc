@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -37,7 +37,7 @@ EmberGenerator::EmberGenerator( ComponentId_t id, Params& params, std::string na
 
     setVerbosePrefix();
 
-    Params distribParams = params.find_prefix_params("distribParams.");
+    Params distribParams = params.get_scoped_params("distribParams");
     std::string distribModule = params.find<std::string>("distribModule", "ember.ConstDistrib");
 
 	m_computeDistrib = dynamic_cast<EmberComputeDistribution*>( loadModule(distribModule, distribParams) );

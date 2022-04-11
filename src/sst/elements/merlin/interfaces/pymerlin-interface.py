@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 #
-# Copyright 2009-2020 NTESS. Under the terms
+# Copyright 2009-2021 NTESS. Under the terms
 # of Contract DE-NA0003525 with NTESS, the U.S.
 # Government retains certain rights in this software.
 #
-# Copyright (c) 2009-2020, NTESS
+# Copyright (c) 2009-2021, NTESS
 # All rights reserved.
 #
 # Portions are copyright of other developers:
@@ -27,12 +27,17 @@ class LinkControl(NetworkInterface):
 
     # returns subcomp, port_name
     def build(self,comp,slot,slot_num,job_id,job_size,logical_nid,use_nid_remap = False):
+        if self._check_first_build():
+            set_name = "params_%s"%self._instance_name
+            sst.addGlobalParams(set_name, self._getGroupParams("params"))
+            sst.addGlobalParam(set_name,"job_id",job_id)
+            sst.addGlobalParam(set_name,"job_size",job_size)
+            sst.addGlobalParam(set_name,"use_nid_remap",use_nid_remap)
+
+
         sub = comp.setSubComponent(slot,"merlin.linkcontrol",slot_num)
         self._applyStatisticsSettings(sub)
-        sub.addParams(self._getGroupParams("params"))
-        sub.addParam("job_id",job_id)
-        sub.addParam("job_size",job_size)
-        sub.addParam("use_nid_remap",use_nid_remap)
+        sub.addGlobalParamSet("params_%s"%self._instance_name)
         sub.addParam("logical_nid",logical_nid)
         return sub,"rtr_port"
 

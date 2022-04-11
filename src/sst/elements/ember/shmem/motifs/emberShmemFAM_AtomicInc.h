@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -259,6 +259,16 @@ public:
 	    EmberShmemFAM_AtomicIncBaseGenerator<TYPE,2>(id, params, name ) { }
 };
 
+#define ELI_params \
+ { "arg.computeTime","Sets the compute time between SHMEM ops", "0" },\
+ { "arg.totalBytes","Sets the total size of the FAM memory space", "" },\
+ { "arg.updates","Sets the number of updates", "4096" },\
+ { "arg.iterations","Sets the number of iterations", "1" },\
+ { "arg.hotMult","Sets the multiplier for the hot node", "1" },\
+ { "arg.printTotals","Sets if totals should be printed", "false" },\
+ { "arg.outLoop","Sets the number of outer loops", "1" },\
+ { "arg.numFamNodes","Sets the number of FAM nodes", "0" },\
+
 class EmberShmemFAM_AtomicIncIntGenerator : public EmberShmemFAM_AtomicIncGenerator<int, 0> {
 public:
     SST_ELI_REGISTER_SUBCOMPONENT_DERIVED(
@@ -271,6 +281,7 @@ public:
     )
 
     SST_ELI_DOCUMENT_PARAMS(
+		ELI_params
     )
 public:
 	EmberShmemFAM_AtomicIncIntGenerator(SST::ComponentId_t id, Params& params) :
@@ -289,11 +300,14 @@ public:
     )
 
     SST_ELI_DOCUMENT_PARAMS(
+		ELI_params
     )
 public:
 	EmberShmemFAM_AtomicIncLongGenerator(SST::ComponentId_t id, Params& params) :
 	    EmberShmemFAM_AtomicIncGenerator(id, params, "ShmemFAM_AtomicIncLong") {}
 };
+
+#undef ELI_params
 
 }
 }

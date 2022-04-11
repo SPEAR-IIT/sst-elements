@@ -1,8 +1,8 @@
-// Copyright 2013-2020 NTESS. Under the terms
+// Copyright 2013-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2013-2020, NTESS
+// Copyright (c) 2013-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -36,6 +36,23 @@ class MsgTiming : public SubComponent {
         "",
         SST::Firefly::CtrlMsg::MsgTiming
     )
+
+	SST_ELI_DOCUMENT_PARAMS( 
+        {"shortMsgLength","Sets the short to long message transition point", "16000"},
+        {"sendAckDelay_ns","", "0"},
+        {"txSetupMod","Set the module used to calculate TX setup latency", ""},
+        {"rxSetupMod","Set the module used to calculate RX setup latency", ""},
+        {"rxPostMod","Set the module used to calculate RX post latency", ""},
+        {"txFiniMod","Set the module used to calculate TX fini latency", ""},
+        {"rxFiniMod","Set the module used to calculate RX fini latency", ""},
+	)
+	/* PARAMS
+		txSetupModParams.*
+		rxSetupModParams.*
+		rxPostModParams.*,
+		txFiniModParams.*,
+		rxFiniModParams.*
+	*/
 
     inline MsgTiming( ComponentId_t id, Params& params );
     inline ~MsgTiming();
@@ -84,28 +101,28 @@ MsgTiming::MsgTiming( ComponentId_t id, Params& params ) :
     m_sendAckDelay = params.find<int>( "sendAckDelay_ns", 0 );
 
     std::string tmpName = params.find<std::string>("txSetupMod");
-    Params tmpParams = params.find_prefix_params("txSetupModParams.");
+    Params tmpParams = params.get_scoped_params("txSetupModParams");
     m_txSetupMod = dynamic_cast<LatencyMod*>( loadModule( tmpName, tmpParams ) );
     assert( m_txSetupMod );
 
     tmpName = params.find<std::string>("rxSetupMod");
-    tmpParams = params.find_prefix_params("rxSetupModParams.");
+    tmpParams = params.get_scoped_params("rxSetupModParams");
     m_rxSetupMod = dynamic_cast<LatencyMod*>( loadModule( tmpName, tmpParams ) );
     assert( m_rxSetupMod );
 
     tmpName = params.find<std::string>("rxPostMod");
     if ( ! tmpName.empty() ) {
-        tmpParams = params.find_prefix_params("rxPostModParams.");
+        tmpParams = params.get_scoped_params("rxPostModParams");
         m_rxPostMod = dynamic_cast<LatencyMod*>( loadModule( tmpName, tmpParams ) );
     }
 
     tmpName = params.find<std::string>("txFiniMod","firefly.LatencyMod");
-    tmpParams = params.find_prefix_params("txFiniModParams.");
+    tmpParams = params.get_scoped_params("txFiniModParams");
     m_txFiniMod = dynamic_cast<LatencyMod*>( loadModule( tmpName, tmpParams ) );
     assert( m_txFiniMod );
 
     tmpName = params.find<std::string>("rxFiniMod","firefly.LatencyMod");
-    tmpParams = params.find_prefix_params("rxFiniModParams.");
+    tmpParams = params.get_scoped_params("rxFiniModParams");
     m_rxFiniMod = dynamic_cast<LatencyMod*>( loadModule( tmpName, tmpParams ) );
     assert( m_rxFiniMod );
 }

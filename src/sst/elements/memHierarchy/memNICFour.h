@@ -1,8 +1,8 @@
-// Copyright 2013-2020 NTESS. Under the terms
+// Copyright 2013-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2013-2020, NTESS
+// Copyright (c) 2013-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -89,9 +89,7 @@ public:
     enum NetType { REQ, ACK, FWD, DATA };
     /* Constructor */
     MemNICFour(ComponentId_t id, Params &params);
-private:
-    void build(Params& params);
-public:
+
     /* Destructor */
     ~MemNICFour() { }
 

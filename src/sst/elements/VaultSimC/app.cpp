@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -25,7 +25,6 @@ static unsigned int missRate[][3] = {{0,51,32},   //app 0
 				     {0,18,15}};  //app 1
 static unsigned int isLoad[] = {3,32}; // out of 64
 
-using namespace SST::MemHierarchy;
 using namespace SST::VaultSim;
 
 MemReqEvent *cpu::getInst(int cacheLevel, int app, int core) {

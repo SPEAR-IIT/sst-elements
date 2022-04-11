@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -35,8 +35,13 @@ public:
     )
 
     SST_ELI_DOCUMENT_PARAMS(
-        {   "arg.iterations",       "Sets the number of ping pong operations to perform",   "1"},
-        {   "arg.messagesize",      "Sets the size of the message in bytes",        "1024"},
+        {   "arg.messagesize",     "Sets the size of the message in bytes",        "1024"},
+        {   "arg.iterations",      "Sets the number of ping pong operations to perform",   "1"},
+        {   "arg.stream_n",        "Sets the size number of items to stream",   "1000"},
+        {   "arg.printRank",       "Sets the rank that prints results",   "0"},
+        {   "arg.detailedCompute", "Sets the list or ranks that do detailed compute",   ""},
+        {   "arg.computeTime",     "Sets the compute time",   "0"},
+        {   "arg.computeWindow",   "Sets the maximum compute time",   "0"},
     )
 
     SST_ELI_DOCUMENT_STATISTICS(

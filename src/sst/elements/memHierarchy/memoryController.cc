@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -117,7 +117,7 @@ MemController::MemController(ComponentId_t id, Params &params) : Component(id), 
         } else {
             out.output("%s, WARNING: loading backend in legacy mode (from parameter set). Instead, load backend into this controller's 'backend' slot via ctrl.setSubComponent() in configuration.\n", getName().c_str());
         }
-        Params tmpParams = params.find_prefix_params("backendConvertor.backend.");
+        Params tmpParams = params.get_scoped_params("backendConvertor.backend");
         std::string name = params.find<std::string>("backendConvertor.backend", "memHierarchy.simpleMem");
         memory = loadAnonymousSubComponent<MemBackend>(name, "backend", 0, ComponentInfo::INSERT_STATS | ComponentInfo::SHARE_PORTS, tmpParams);
         if (!memory) {
@@ -127,7 +127,7 @@ MemController::MemController(ComponentId_t id, Params &params) : Component(id), 
     }
 
     std::string convertortype = memory->getBackendConvertorType();
-    Params tmpParams = params.find_prefix_params("backendConvertor.");
+    Params tmpParams = params.get_scoped_params("backendConvertor");
     memBackendConvertor_ = loadAnonymousSubComponent<MemBackendConvertor>(convertortype, "backendConvertor", 0, ComponentInfo::INSERT_STATS, tmpParams, memory, requestWidth);
 
     if (memBackendConvertor_ == nullptr) {
@@ -159,8 +159,8 @@ MemController::MemController(ComponentId_t id, Params &params) : Component(id), 
             string listenerMod     = params.find<std::string>(nextListenerName, "");
 
             if (listenerMod != "") {
-                sprintf(nextListenerParams, "listener%" PRIu32 ".", i);
-                Params listenerParams = params.find_prefix_params(nextListenerParams);
+                sprintf(nextListenerParams, "listener%" PRIu32 "", i);
+                Params listenerParams = params.get_scoped_params(nextListenerParams);
 
                 CacheListener* loadedListener = loadAnonymousSubComponent<CacheListener>(listenerMod, "listener", i, ComponentInfo::INSERT_STATS, listenerParams);
                 listeners_.push_back(loadedListener);
@@ -202,7 +202,7 @@ MemController::MemController(ComponentId_t id, Params &params) : Component(id), 
     link_ = loadUserSubComponent<MemLinkBase>("cpulink");
 
     if (!link_ && isPortConnected("direct_link")) {
-        Params linkParams = params.find_prefix_params("cpulink.");
+        Params linkParams = params.get_scoped_params("cpulink");
         linkParams.insert("port", "direct_link");
         linkParams.insert("latency", link_lat, false);
         linkParams.insert("accept_region", "1", false);
@@ -213,7 +213,7 @@ MemController::MemController(ComponentId_t id, Params &params) : Component(id), 
             out.fatal(CALL_INFO,-1,"%s, Error: No connected port detected. Connect 'direct_link' or 'network' port.\n", getName().c_str());
         }
 
-        Params nicParams = params.find_prefix_params("memNIC.");
+        Params nicParams = params.get_scoped_params("memNIC");
         nicParams.insert("group", "4", false);
         nicParams.insert("accept_region", "1", false);
 
@@ -231,12 +231,14 @@ MemController::MemController(ComponentId_t id, Params &params) : Component(id), 
 
     clockLink_ = link_->isClocked();
     link_->setRecvHandler( new Event::Handler<MemController>(this, &MemController::handleEvent));
-    link_->setName(getName());
 
-    if (gotRegion)
+    if (gotRegion) {
         link_->setRegion(region_);
-    else
+    } else
         region_ = link_->getRegion();
+
+    adjustRegionToMemSize();
+
     privateMemOffset_ = 0;
 
     // Set up backing store if needed
@@ -516,6 +518,8 @@ void MemController::init(unsigned int phase) {
 
     region_ = link_->getRegion(); // This can change during init, but should stabilize before we start receiving init data
 
+    adjustRegionToMemSize();
+
     /* Inherit region from our source(s) */
     if (!phase) {
         /* Announce our presence on link */
@@ -647,6 +651,44 @@ void MemController::processInitEvent( MemEventInit* me ) {
     }
 
     delete me;
+}
+    
+
+void MemController::adjustRegionToMemSize() {
+    // Check memSize_ against region
+    // Set region_ to the smaller of the two
+    // It's sometimes useful to be able to adjust one of the params and not the other
+    // So, a mismatch is likely not an error, but alert the user in debug mode just in case
+    // TODO deprecate mem_size & just use region? 
+    uint64_t regSize = region_.end - region_.start;
+    if (regSize != ((uint64_t) - 1)) {  // The default is for region_.end = uint64_t -1, but then if we add one we wrap to 0...
+        regSize--;
+    }
+    if (region_.interleaveStep != 0) {
+        uint64_t steps = regSize / region_.interleaveStep;
+        regSize = steps * region_.interleaveSize;
+
+        if (regSize > memSize_) { /* Reduce the end point so that regSize is no larger than memSize */
+#ifdef __SST_DEBUG_OUTPUT__
+            out.output("%s, Notice: memory controller's region is larger than the backend's mem_size, controller is limiting accessible memory to mem_size\n"
+                    "Region: start=%" PRIu64 ", end=%" PRIu64 ", interleaveStep=%" PRIu64 ", interleaveSize=%" PRIu64 ". MemSize: %" PRIu64 "B\n",
+                    getName().c_str(), region_.start, region_.end, region_.interleaveStep, region_.interleaveSize, memSize_);
+#endif
+            steps = memSize_ / region_.interleaveSize;
+            regSize = steps * region_.interleaveStep;
+            region_.end = region_.start + regSize - 1;
+        }
+    } else if (regSize > memSize_) {
+#ifdef __SST_DEBUG_OUTPUT__
+        out.output("%s, Notice: memory controller's region is larger than the backend's mem_size, controller is limiting accessible memory to mem_size\n"
+                "Region: start=%" PRIu64 ", end=%" PRIu64 ", interleaveStep=%" PRIu64 ", interleaveSize=%" PRIu64 ". MemSize: %" PRIu64 "B\n",
+                getName().c_str(), region_.start, region_.end, region_.interleaveStep, region_.interleaveSize, memSize_);
+#endif
+        region_.end = region_.start + memSize_ - 1;
+    }
+
+    // Synchronize our region with link in case we adjusted it above
+    link_->setRegion(region_);
 }
 
 void MemController::printStatus(Output &statusOut) {

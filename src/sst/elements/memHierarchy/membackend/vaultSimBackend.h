@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -40,7 +40,6 @@ public:
     virtual bool isClocked() { return false; }
 
 private:
-    void build(Params& params);
     void handleCubeEvent(SST::Event *event);
 
     std::set<ReqId> outToCubes;

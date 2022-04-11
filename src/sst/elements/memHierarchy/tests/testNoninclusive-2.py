@@ -156,13 +156,17 @@ for x in range(memories):
     memctrl.addParams({
         "clock" : "500MHz",
         "backing" : "none",
+        "interleave_size" : "64B",    # Interleave at line granularity between memories
+        "interleave_step" : str(memories * 64) + "B",
+        "addr_range_start" : x*64,
+        "addr_range_end" :  1024*1024*1024 - ((memories - x) * 64) + 63,
         "debug" : DEBUG_MEM,
         "debug_level" : DEBUG_LEV,
     })
     memory = memctrl.setSubComponent("backend", "memHierarchy.simpleDRAM")
     memory.addParams({
         "max_requests_per_cycle" : 2,
-        "mem_size" : "512MiB",
+        "mem_size" : "1GiB",
         "tCAS" : 2,
         "tRCD" : 2,
         "tRP" : 3,

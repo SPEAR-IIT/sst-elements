@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -44,15 +44,15 @@ ZodiacSiriusTraceReader::ZodiacSiriusTraceReader(ComponentId_t id, Params& param
     string osModule = params.find<std::string>("os.module");
     assert( ! osModule.empty() );
 
-   	Params hermesParams = params.find_prefix_params("hermesParams." );
+   	Params hermesParams = params.get_scoped_params("hermesParams" );
 
     os = loadUserSubComponent<OS>( "OS" );
     assert(os);
 
     params.print_all_params(std::cout);
-    Params osParams = params.find_prefix_params("os.");
+    Params osParams = params.get_scoped_params("os");
     std::string osName = osParams.find<std::string>("name");
-    Params modParams = params.find_prefix_params( osName + "." );
+    Params modParams = params.get_scoped_params( osName );
     msgapi = loadAnonymousSubComponent<MP::Interface>( "firefly.hadesMP", "", 0, ComponentInfo::SHARE_NONE, modParams );
     assert(msgapi);
 

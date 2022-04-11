@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // This file is part of the SST software package. For license
@@ -209,7 +209,7 @@ namespace SST
 					nextallocmem = 0;
 					allocatedmempool = 0;
 
-					pool = new Pool((Params) params.find_prefix_params("memory."), SST::OpalComponent::MemType::LOCAL, node);
+					pool = new Pool((Params) params.get_scoped_params("memory"), SST::OpalComponent::MemType::LOCAL, node);
 					memory_size = (uint32_t) params.find<uint32_t>("memory.size", 1);	// in KB's
 					page_size = (uint32_t) params.find<uint32_t>("memory.frame_size", 4);
 					page_size = page_size * 1024;

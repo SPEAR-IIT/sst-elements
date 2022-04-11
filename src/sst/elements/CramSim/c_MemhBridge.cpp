@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -52,15 +52,16 @@ c_MemhBridge::c_MemhBridge(ComponentId_t x_id, Params& x_params) :
 	//k_txnTraceFileName.pop_back(); // remove trailing newline (??)
 	if (k_printTxnTrace) {
 		if (k_txnTraceFileName.compare("-") == 0) {// set output to std::cout
-			std::cout << "Setting txn trace output to std::cout" << std::endl;
+			output->output("Setting txn trace output to std::cout\n");
 			m_txnTraceStreamBuf = std::cout.rdbuf();
 		} else { // open the file and direct the txnTraceStream to it
-			std::cout << "Setting txn trace output to " << k_txnTraceFileName << std::endl;
+			output->output("Setting txn trace output to %s\n", k_txnTraceFileName.c_str());
 			m_txnTraceOFStream.open(k_txnTraceFileName);
 			if (m_txnTraceOFStream) {
 				m_txnTraceStreamBuf = m_txnTraceOFStream.rdbuf();
 			} else {
-				std::cerr << "Failed to open txn trace output file " << k_txnTraceFileName << ", redirecting to stdout";
+				output->output("Failed to open txn trace output file %s, redirecting to stdout\n", 
+                                        k_txnTraceFileName.c_str());
 				m_txnTraceStreamBuf = std::cout.rdbuf();
 			}
 		}

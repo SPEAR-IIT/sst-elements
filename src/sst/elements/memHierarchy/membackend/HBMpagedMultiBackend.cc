@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -34,10 +34,6 @@ using namespace HBMDRAMSim;
 
 HBMpagedMultiMemory::HBMpagedMultiMemory(ComponentId_t id, Params &params)
   : HBMDRAMSimMemory(id, params), pagesInFast(0), lastMin(0) {
-      build(params);
-  }
-
-void HBMpagedMultiMemory::build(Params& params) {
     dbg.init("@R:HBMpagedMultiMemory::@p():@l " + getName() + ": ", 0, 0,
              (Output::output_location_t)params.find<int>("debug", 0));
     dbg.output(CALL_INFO, "making HBMpagedMultiMemory controller\n");

@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -55,7 +55,7 @@ c_BankStateRead::c_BankStateRead(std::map<std::string, unsigned>* x_bankParams) 
 }
 
 c_BankStateRead::~c_BankStateRead() {
-	// std::cout << std::endl << __PRETTY_FUNCTION__ << std::endl;
+        // Simulation::getSimulation()->getSimulationOutput().output("\n%s\n", __PRETTY_FUNCTION__);
 
 }
 
@@ -91,8 +91,7 @@ void c_BankStateRead::handleCommand(c_BankInfo* x_bank,
 			x_bank->setLastCommandCycle(e_BankCommandType::PRE, l_time);
 			break;
 		default:
-			std::cout << "Unrecognized state" << std::endl;
-			exit(-1);
+                        Simulation::getSimulation()->getSimulationOutput().fatal(CALL_INFO, -1, "Unrecognized state\n");
 			break;
 		}
 
@@ -151,8 +150,8 @@ void c_BankStateRead::clockTic(c_BankInfo* x_bank, SimTime_t x_cycle) {
 					}
 					break;
 				default:
-					std::cout << "Unrecognized state" << std::endl;
-					exit(-1);
+                                        Simulation::getSimulation()->getSimulationOutput().fatal(
+                                                CALL_INFO, -1, "Unrecognized state\n");
 					break;
 				}
 			}
@@ -192,8 +191,8 @@ void c_BankStateRead::enter(c_BankInfo* x_bank, c_BankState* x_prevState,
 			m_timer = 0;
 			break;
 		default:
-			std::cout << "Unrecognized state" << std::endl;
-			exit(-1);
+                        Simulation::getSimulation()->getSimulationOutput().fatal(
+                                CALL_INFO, -1, "Unrecognized state\n");
 			break;
 		}
 

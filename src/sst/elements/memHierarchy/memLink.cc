@@ -1,8 +1,8 @@
-// Copyright 2013-2020 NTESS. Under the terms
+// Copyright 2013-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2013-2020, NTESS
+// Copyright (c) 2013-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -24,10 +24,6 @@ using namespace SST::MemHierarchy;
 /* Constructor */
 
 MemLink::MemLink(ComponentId_t id, Params &params) : MemLinkBase(id, params) {
-    build(params);
-}
-
-void MemLink::build(Params &params) {
     // Configure link
     std::string latency = params.find<std::string>("latency", "50ps");
     std::string port = params.find<std::string>("port", "port");

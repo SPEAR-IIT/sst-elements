@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -71,6 +71,9 @@ class EmberShmemLib : public EmberLib {
         "",
         "SST::Ember::EmberShmemLib"
     )
+
+    SST_ELI_DOCUMENT_PARAMS(
+	)
 
     typedef std::queue<EmberEvent*> Queue;
 

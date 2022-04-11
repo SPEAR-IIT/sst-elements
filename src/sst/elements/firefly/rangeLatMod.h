@@ -1,9 +1,9 @@
 
-// Copyright 2013-2020 NTESS. Under the terms
+// Copyright 2013-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2013-2020, NTESS
+// Copyright (c) 2013-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -41,6 +41,14 @@ class RangeLatMod : public LatencyMod {
         "",
         "SST::Firefly::RangeLatMod"
     )
+
+    SST_ELI_DOCUMENT_PARAMS(
+		{"base","",""},
+		{"op","",""},
+    )
+    /* PARAMS
+        range.*
+    */
   private:
 
     struct Entry {
@@ -72,7 +80,7 @@ class RangeLatMod : public LatencyMod {
         printf("%s() op=%s base=%.3f\n", __func__, tmpStr.c_str(), base * 1000000000.0);
 #endif
 
-        Params range = params.find_prefix_params("range.");
+        Params range = params.get_scoped_params("range");
         range.enableVerify(false);
 
         std::set<std::string> keys = range.getKeys();

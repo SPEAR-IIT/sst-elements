@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -28,7 +28,7 @@ class FireflyNetworkEvent : public Event {
 
   public:
 
-    FireflyNetworkEvent( ) : offset(0), bufLen(0), m_isHdr(false), m_isCtrl(false), pktOverhead(0) {
+    FireflyNetworkEvent( ) : offset(0), bufLen(0), m_isHdr(false), m_isTail(false), m_isCtrl(false), pktOverhead(0) {
         buf.reserve( 1000 );
         assert( 0 == buf.size() );
     }
@@ -50,12 +50,10 @@ class FireflyNetworkEvent : public Event {
     int payloadSize() { return pktOverhead + bufSize(); }
     void setSrcNode(int node ) { srcNode = node; }
     void setSrcPid( int pid ) { srcPid = pid; }
-    void setSrcStream( int stream ) { srcStream = stream; }
     void setDestPid( int pid ) { destPid = pid; }
 
     int getSrcNode() { return srcNode; }
     int getSrcPid() { return srcPid; }
-    int getSrcStream() { return srcStream; }
     int getDestPid() { return destPid; }
 
     size_t bufSize() {
@@ -94,7 +92,6 @@ class FireflyNetworkEvent : public Event {
         seq = me->seq;
         srcNode = me->srcNode;
         srcPid = me->srcPid;
-        srcStream = me->srcStream;
         destPid = me->destPid;
         m_isHdr = me->m_isHdr;
         m_isTail = me->m_isTail;
@@ -110,7 +107,6 @@ class FireflyNetworkEvent : public Event {
         seq = me.seq;
         srcNode = me.srcNode;
         srcPid = me.srcPid;
-        srcStream = me.srcStream;
         destPid = me.destPid;
         m_isHdr = me.m_isHdr;
         m_isTail = me.m_isTail;
@@ -140,7 +136,6 @@ class FireflyNetworkEvent : public Event {
     uint16_t        seq;
     int             srcNode;
     int             srcPid;
-    int             srcStream;
     int             destPid;
     bool            m_isHdr;
     bool            m_isTail;
@@ -160,7 +155,6 @@ class FireflyNetworkEvent : public Event {
         ser & buf;
         ser & srcNode;
         ser & srcPid;
-        ser & srcStream;
         ser & destPid;
         ser & pktOverhead;
         ser & m_isHdr;

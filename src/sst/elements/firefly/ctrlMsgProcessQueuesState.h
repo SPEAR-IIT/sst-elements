@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -68,30 +68,30 @@ class ProcessQueuesState : public SubComponent
     )
 
     SST_ELI_DOCUMENT_PARAMS(
-        {"shortMsgLength","Sets the short to long message transition point", "16000"},
         {"verboseLevel","Set the verbose level", "1"},
-        {"debug","Set the debug level", "0"},
-        {"txMemcpyMod","Set the module used to calculate TX mempcy latency", ""},
-        {"rxMemcpyMod","Set the module used to calculate RX mempcy latency", ""},
-        {"matchDelay_ns","Sets the time to do a match", "100"},
-        {"txSetupMod","Set the module used to calculate TX setup latency", ""},
-        {"rxSetupMod","Set the module used to calculate RX setup latency", ""},
-        {"txFiniMod","Set the module used to calculate TX fini latency", ""},
-        {"rxFiniMod","Set the module used to calculate RX fini latency", ""},
-        {"rxPostMod","Set the module used to calculate RX post latency", ""},
+        {"verboseMask","Set the verbose level", "1"},
+        {"nicsPerNode","Sets the number of NIC per node","1" },
+        {"pqs.maxUnexpectedMsg","Sets the maximum unexpected messages","32" },
+        {"pqs.maxPostedShortBuffers","Sets the maximum posted short buffers","512" },
+        {"pqs.minPostedShortBuffers","Sets the minimum posted short buffers","5"},
         {"loopBackPortName","Sets port name to use when connecting to the loopBack component","loop"},
-        {"rxNicDelay_ns","", "0"},
-        {"txNicDelay_ns","", "0"},
-        {"sendReqFiniDelay_ns","", "0"},
-        {"recvReqFiniDelay_ns","", "0"},
-        {"sendAckDelay_ns","", "0"},
-        {"regRegionXoverLength","Sets the transition point page pinning", "4096"},
-        {"regRegionPerPageDelay_ns","Sets the time to pin pages", "0"},
-        {"regRegionBaseDelay_ns","Sets the base time to pin pages", "0"},
-        {"sendStateDelay_ps","", "0"},
-        {"recvStateDelay_ps","", "0"},
-        {"waitallStateDelay_ps","", "0"},
-        {"waitanyStateDelay_ps","", "0"},
+        {"ackVN","Sets the VN to use for acks","0"},
+        {"rendezvousVN","Sets the VN to use for rendezvous","0"},
+
+        /* these PARAMS are used by ctrlMsgTiming
+            "shortMsgLength"
+            "sendAckDelay_ns"
+            "txSetupMod"
+            "txSetupModParams"
+            "rxSetupMod"
+            "rxSetupModParams"
+            "rxPostMod"
+            "rxPostModParams"
+            "txFiniMod"
+            "txFiniModParams"
+            "rxFiniMod"
+            "rxFiniModParams"
+        */
     )
 
     SST_ELI_DOCUMENT_PORTS(
@@ -136,9 +136,9 @@ class ProcessQueuesState : public SubComponent
         NotSerializable(LoopBackEvent)
     };
 
-    static const unsigned long MaxPostedShortBuffers = 512;
-    static const unsigned long MinPostedShortBuffers = 5;
-
+    int m_maxPostedShortBuffers;
+    int m_minPostedShortBuffers;
+    int m_maxUnexpectedMsg;
 
   public:
     ProcessQueuesState( ComponentId_t id, Params& params );
@@ -280,34 +280,29 @@ class ProcessQueuesState : public SubComponent
 
     class ProcessShortListCtx : public FuncCtxBase {
       public:
-        ProcessShortListCtx( std::deque<Msg*>& q ) :
-            m_msgQ(q), m_iter(m_msgQ.begin()) { }
 
-        MatchHdr&   hdr() {
-            return (*m_iter)->hdr();
-        }
+        ProcessShortListCtx( std::deque<Msg*>* msgQ ) :
+			m_msgQ(msgQ), m_iter( msgQ->begin() ), m_done(false) {}
 
-        std::vector<IoVec>& ioVec() {
-     	 	return (*m_iter)->ioVec();
-        }
+        MatchHdr&   hdr() { return (*m_iter)->hdr(); }
+        std::vector<IoVec>& ioVec() { return (*m_iter)->ioVec(); }
 
-        Msg* msg() {
-            return *m_iter;
-        }
-        std::deque<Msg*>& getMsgQ() { return m_msgQ; }
-        bool msgQempty() { return m_msgQ.empty(); }
+        Msg* msg() { return *m_iter; }
 
         _CommReq*    req;
 
         void removeMsg() {
             delete *m_iter;
-            m_iter = m_msgQ.erase(m_iter);
+            unlinkMsg();
         }
 
-        bool isDone() { return m_iter == m_msgQ.end(); }
+        void unlinkMsg() { m_iter = m_msgQ->erase(m_iter); }
+        void setDone( ) { m_done = true; }
+        bool isDone() { return m_done || m_iter == m_msgQ->end();  }
         void incPos() { ++m_iter; }
       private:
-        std::deque<Msg*> 			m_msgQ;
+        bool m_done;
+        std::deque<Msg*>*                       m_msgQ;
         typename std::deque<Msg*>::iterator 	m_iter;
     };
 
@@ -346,6 +341,7 @@ class ProcessQueuesState : public SubComponent
 
     void processRecv_0( _CommReq* );
     void processRecv_1( _CommReq* );
+    void processRecv_2( Stack*,_CommReq* );
 
     void processMakeProgress( Stack* );
 
@@ -383,7 +379,7 @@ class ProcessQueuesState : public SubComponent
 
 
     bool        checkMatchHdr( MatchHdr& hdr, MatchHdr& wantHdr, uint64_t ignore );
-    _CommReq*	searchPostedRecv( MatchHdr& hdr, int& delay );
+    _CommReq*	searchPostedRecv( std::deque< _CommReq* >& pstd, MatchHdr& hdr, int& delay );
 
     void exit( int delay = 0 ) {
         dbg().debug(CALL_INFO,2,DBG_MSK_PQS_APP_SIDE,"exit ProcessQueuesState\n");
@@ -449,12 +445,19 @@ class ProcessQueuesState : public SubComponent
         m_delayLink->send( delay, new DelayEvent(callback) );
     }
     void passCtrlToFunction( uint64_t delay = 0 ) {
-        dbg().debug(CALL_INFO,1,DBG_MSK_PQS_APP_SIDE,"\n");
+        dbg().debug(CALL_INFO,1,DBG_MSK_PQS_Q,"recvdMsgV=%zu,%zu:%d m_unexpectedMsgQ=%zu m_pstdRecvPre=%zu m_pstdRcvQ=%zu\n",
+                            m_recvdMsgQ[0].size(), m_recvdMsgQ[1].size(), m_recvdMsgQpos, m_unexpectedMsgQ.size(), m_pstdRcvPreQ.size(), m_pstdRcvQ.size() );
         m_returnToCaller->send( delay, NULL );
     }
 
     void memHeapAlloc( size_t bytes, std::function<void(uint64_t)> callback ) {
         m_memHeapLink->alloc( bytes, callback );
+    }
+
+    const char* recvdMsgQsize() {
+		static char m_stringBuf[100];
+		snprintf( m_stringBuf, 100, "%d:%zu,%zu",m_recvdMsgQpos, m_recvdMsgQ[0].size(), m_recvdMsgQ[1].size() );
+        return m_stringBuf; 
     }
 
     void loopHandler( int, std::vector<IoVec>&, void* );
@@ -478,7 +481,10 @@ class ProcessQueuesState : public SubComponent
     bool    m_missedInt;
 
     std::deque< _CommReq* >         m_pstdRcvQ;
-    std::deque< Msg* >              m_recvdMsgQ;
+    std::deque< _CommReq* >         m_pstdRcvPreQ;
+    std::vector<std::deque< Msg* >> m_recvdMsgQ;
+	int m_recvdMsgQpos;
+    std::deque< Msg* >              m_unexpectedMsgQ;
 
     std::deque< _CommReq* >         m_longGetFiniQ;
     std::deque< GetInfo* >          m_longAckQ;

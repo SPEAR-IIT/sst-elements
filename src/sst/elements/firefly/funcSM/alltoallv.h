@@ -1,8 +1,8 @@
-// Copyright 2013-2020 NTESS. Under the terms
+// Copyright 2013-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2013-2020, NTESS
+// Copyright (c) 2013-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -45,6 +45,11 @@ class AlltoallvFuncSM :  public FunctionSMInterface
         "",
         ""
     )
+
+	SST_ELI_DOCUMENT_PARAMS(
+		{"smallCollectiveVN","Sets the VN to use for small collectives","0"},
+		{"smallCollectiveSize","Sets the size of small collectives","0"},
+	)
   private:
 
     enum StateEnum {

@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -126,7 +126,7 @@ ArielCPU::ArielCPU(ComponentId_t id, Params& params) :
         }
 
         output->verbose(CALL_INFO, 1, 0, "Loading memory manager: %s\n", memorymanager.c_str());
-        Params mmParams = params.find_prefix_params("memmgr.");
+        Params mmParams = params.get_scoped_params("memmgr");
         memmgr = loadAnonymousSubComponent<ArielMemoryManager>(memorymanager, "memmgr", 0, ComponentInfo::SHARE_STATS | ComponentInfo::INSERT_STATS, mmParams);
         if (NULL == memmgr) output->fatal(CALL_INFO, -1, "Failed to load memory manager: %s\n", memorymanager.c_str());
     }

@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -46,14 +46,6 @@ EmberEngine::EmberEngine(SST::ComponentId_t id, SST::Params& params) :
 
 	output.init( prefix.str(), verbosity, mask, Output::STDOUT);
 
-    Params osParams = params.find_prefix_params("os.");
-
-    // std::string osName = osParams.find<std::string>("name");
-    // assert( ! osName.empty() );
-    // std::string osModuleName = osParams.find<std::string>("module");
-    // assert( ! osModuleName.empty() );
-
-    // Params modParams = params.find_prefix_params( osName + "." );
     std::ostringstream tmp;
     tmp << m_jobId;
 
@@ -66,11 +58,6 @@ EmberEngine::EmberEngine(SST::ComponentId_t id, SST::Params& params) :
 
     std::string motifLogFile = params.find<std::string>("motifLog", "");
     if("" != motifLogFile) {
-        // std::ostringstream logPrefix;
-        // logPrefix << motifLogFile << "-" << m_jobId << "-" << Simulation::getSimulation()->getRank().rank << ".log";
-        // //logPrefix << motifLogFile << "-" << id << "-" << m_jobId << ".log";
-        // output.verbose(CALL_INFO, 4, ENGINE_MASK, "Motif log file will write to: %s\n", logPrefix.str().c_str());
-        // m_motifLogger = new EmberMotifLog(logPrefix.str(), m_jobId);
         m_motifLogger = new EmberMotifLog(motifLogFile, m_jobId);
     } else {
         m_motifLogger = NULL;
@@ -90,15 +77,13 @@ EmberEngine::EmberEngine(SST::ComponentId_t id, SST::Params& params) :
     	tmp << i;
 
         //NetworkSim: Add the rankmapper parameter as motif parameters and pass it.
-        //Params::value_type addedparam = std::make_pair("motif" + tmp.str() + ".rankmapper", params.find_string("rankmapper", "ember.LinearMap"));
         params.insert("motif" + tmp.str() + ".rankmapper", params.find<string>("rankmapper", "ember.LinearMap"), true);
 
         //NetworkSim: Add the mapFile parameter as motif parameters and pass it.
-        //Params::value_type addedparam2 = std::make_pair("motif" + tmp.str() + ".rankmap.mapFile", params.find_string("mapFile", "mapFile.txt"));
         params.insert("motif" + tmp.str() + ".rankmap.mapFile", params.find<string>("mapFile", "mapFile.txt"), true);
         //NetworkSim->end
 
-		motifParams[i] = params.find_prefix_params( "motif" + tmp.str() + "." );
+		motifParams[i] = params.get_scoped_params( "motif" + tmp.str() );
 	}
 
     registerAsPrimaryComponent();
@@ -134,7 +119,7 @@ EmberEngine::ApiMap EmberEngine::createApiMap( OS* os,
 {
     ApiMap tmp;
 
-    Params apiList = params.find_prefix_params( "api." );
+    Params apiList = params.get_scoped_params( "api" );
 
     int apiNum = 0;
     while ( 1 ) {
@@ -142,8 +127,7 @@ EmberEngine::ApiMap EmberEngine::createApiMap( OS* os,
 	    std::ostringstream numStr;
    	    numStr << apiNum++;
 
-
-        Params apiParams = apiList.find_prefix_params( numStr.str() + "." );
+        Params apiParams = apiList.get_scoped_params( numStr.str() );
         if ( apiParams.empty() ) {
             break;
         }
@@ -151,7 +135,7 @@ EmberEngine::ApiMap EmberEngine::createApiMap( OS* os,
         std::string moduleName = apiParams.find<std::string>( "module" );
         assert( ! moduleName.empty() );
 
-        Params modParams = params.find_prefix_params( moduleName + "." );
+        Params modParams = params.get_scoped_params( moduleName );
 
         output.verbose(CALL_INFO, 2, ENGINE_MASK, "moduleName=%s\n", moduleName.c_str());
 

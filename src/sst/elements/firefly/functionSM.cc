@@ -1,8 +1,8 @@
-// Copyright 2013-2020 NTESS. Under the terms
+// Copyright 2013-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2013-2020, NTESS
+// Copyright (c) 2013-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -107,7 +107,7 @@ void FunctionSM::setup( Info* info )
 
     for ( int i = 0; i < NumFunctions; i++ ) {
         std::string name = functionName( (FunctionEnum) i );
-        Params tmp = m_params.find_prefix_params( name + "." );
+        Params tmp = m_params.get_scoped_params( name );
         defaultParams.insert( "name", name, true );
         initFunction( info, (FunctionEnum) i,
                                         name, defaultParams, tmp );

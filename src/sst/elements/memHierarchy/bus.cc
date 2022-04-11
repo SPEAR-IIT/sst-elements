@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -111,8 +111,8 @@ void Bus::sendSingleEvent(SST::Event* ev) {
     if (is_debug_event(event)) {
         dbg_.debug(_L3_,"\n\n");
         dbg_.debug(_L3_,"----------------------------------------------------------------------------------------\n");    //raise(SIGINT);
-        dbg_.debug(_L3_,"Incoming Event. Name: %s, LinkID: %d, Event: %s\n",
-                   this->getName().c_str(), event->getDeliveryLink()->getId(), event->getBriefString().c_str());
+        dbg_.debug(_L3_,"Incoming Event. Name: %s, Event: %s\n",
+                   this->getName().c_str(), event->getBriefString().c_str());
     }
 #endif
     LinkId_t dstLinkId = lookupNode(event->getDst());

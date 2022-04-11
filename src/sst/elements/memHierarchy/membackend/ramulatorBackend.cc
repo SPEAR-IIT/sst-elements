@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -29,9 +29,7 @@ using namespace ramulator;
 ramulatorMemory::ramulatorMemory(ComponentId_t id, Params &params) :
     SimpleMemBackend(id, params),
     callBackFunc(std::bind(&ramulatorMemory::ramulatorDone, this, std::placeholders::_1))
-{ build(params); }
-
-void ramulatorMemory::build(Params& params) {
+{
     std::string ramulatorCfg = params.find<std::string>("configFile",
                                                         NO_STRING_DEFINED);
     if (ramulatorCfg == NO_STRING_DEFINED) {

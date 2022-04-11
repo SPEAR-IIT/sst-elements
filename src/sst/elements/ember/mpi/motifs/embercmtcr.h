@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -39,13 +39,13 @@ public:
         {   "arg.iterations",   "Sets the number of data exchanges to perform", "1"},
         {   "arg.elementsize",  "Sets the number of gridpoints per element", "10"},
         {   "arg.variables",    "Sets the number of physical quantities for which derivatives are calculated", "1"},
-        {   "arg.mx",           "Sets the number of elements per processor in x dim",   "10"},
-        {   "arg.my",           "Sets the number of elements per processor in y dim",   "10"},
-        {   "arg.mz",           "Sets the number of elements per processor in z dim",   "10"},
         {   "arg.px",           "Sets the size of the processors in the machine in x_dim", "4"},
         {   "arg.py",           "Sets the size of the processors in the machine in y_dim", "4"},
         {   "arg.pz",           "Sets the size of the processors in the machine in z_dim", "4"},
         {   "arg.threads",          "Sets the number of MPI threads per processor", "1"},
+        {   "arg.mx",           "Sets the number of elements per processor in x dim",   "10"},
+        {   "arg.my",           "Sets the number of elements per processor in y dim",   "10"},
+        {   "arg.mz",           "Sets the number of elements per processor in z dim",   "10"},
         {   "arg.processorflops",   "Sets the processor flops for compute time estimation", "4"},
         {    "arg.processorfreq",    "Sets the processor frequency for compute time estimation", "2.5"},
         {   "arg.nsComputeMean",    "Sets the mean compute time per processor", "1000"},

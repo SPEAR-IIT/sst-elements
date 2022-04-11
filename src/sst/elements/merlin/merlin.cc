@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -59,6 +59,10 @@ char pymerlin_interface[] = {
 #include "interfaces/pymerlin-interface.inc"
     0x00};
 
+char pymerlin_targetgen[] = {
+#include "target_generator/pymerlin-targetgen.inc"
+    0x00};
+
 char pymerlin_topo_dragonfly[] = {
 #include "topology/pymerlin-topo-dragonfly.inc"
     0x00};
@@ -85,6 +89,7 @@ public:
         primary_module->addSubModule("endpoint",pymerlin_endpoint,"pymerlin-endpoint.py");
         primary_module->addSubModule("router",pymerlin_router,"pymerlin-router.py");
         primary_module->addSubModule("interface",pymerlin_interface,"interfaces/pymerlin-interface.py");
+        primary_module->addSubModule("targetgen",pymerlin_targetgen,"interfaces/pymerlin-targetgen.py");
         primary_module->addSubModule("topology",pymerlin_topo_dragonfly,"topology/pymerlin-topo-dragonfly.py");
         primary_module->addSubModule("topology",pymerlin_topo_hyperx,"topology/pymerlin-topo-hyperx.py");
         primary_module->addSubModule("topology",pymerlin_topo_fattree,"topology/pymerlin-topo-fattree.py");
@@ -96,6 +101,8 @@ public:
         "merlin",
         SST_ELI_ELEMENT_VERSION(1,0,0)
     )
+
+    SST_ELI_EXPORT(SST::Merlin::MerlinPyModule)    
 };
 
 }

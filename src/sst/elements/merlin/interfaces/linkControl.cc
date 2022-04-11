@@ -1,8 +1,8 @@
-// Copyright 2013-2020 NTESS. Under the terms
+// Copyright 2013-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2013-2020, NTESS
+// Copyright (c) 2013-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -19,7 +19,7 @@
 #include "linkControl.h"
 
 #include <sst/core/simulation.h>
-#include <sst/core/sharedRegion.h>
+#include <sst/core/timeLord.h>
 
 #include "merlin.h"
 
@@ -27,23 +27,21 @@ namespace SST {
 using namespace Interfaces;
 
 namespace Merlin {
-    
 
 LinkControl::LinkControl(ComponentId_t cid, Params &params, int vns) :
     SST::Interfaces::SimpleNetwork(cid),
-    rtr_link(nullptr), output_timing(nullptr),
+    rtr_link(nullptr), output_timing(nullptr), congestion_timing(nullptr),
     req_vns(vns), used_vns(0), total_vns(0), vn_out_map(nullptr),
     vn_remap_out(nullptr), output_queues(nullptr), router_credits(nullptr),
     router_return_credits(nullptr), input_queues(nullptr),
-    id(-1), logical_nid(-1), nid_map_shm(nullptr), nid_map(nullptr),
+    id(-1), logical_nid(-1), use_nid_map(false), job_id(0),
     curr_out_vn(0), waiting(true), have_packets(false), start_block(0),
-    idle_start(0),
-    is_idle(true),
+    idle_start(0), is_idle(true),
     receiveFunctor(nullptr), sendFunctor(nullptr),
     network_initialized(false),
-    output(Simulation::getSimulation()->getSimulationOutput())
+    output(Simulation::getSimulation()->getSimulationOutput()),
+    sent(0)
 {
-
     // Get the link bandwidth
     link_bw = params.find<UnitAlgebra>("link_bw");
     if ( !link_bw.hasUnits("B/s") && !link_bw.hasUnits("b/s") ) {
@@ -77,19 +75,21 @@ LinkControl::LinkControl(ComponentId_t cid, Params &params, int vns) :
     if ( isAnonymous() ) {
         port_name = params.find<std::string>("port_name");
     }
-    
+
     rtr_link = configureLink(port_name, std::string("1GHz"), new Event::Handler<LinkControl>(this,&LinkControl::handle_input));
-    
+
     output_timing = configureSelfLink(port_name + "_output_timing", "1GHz",
             new Event::Handler<LinkControl>(this,&LinkControl::handle_output));
 
-    
+    congestion_timing = configureSelfLink(port_name = "_congestion_timing", Simulation::getTimeLord()->getTimeBase().toString(),
+            new Event::Handler<LinkControl>(this,&LinkControl::handle_congestion));
+
     // Input and output buffers.  Not all of them can be set up now.
     // Only those that are sized based on req_vns can be intialized
     // now.  Others will wait until init when we find out the rest of
     // the VN usage.
     input_queues = new network_queue_t[req_vns];
-    
+
     // Need to wait to do output_queues, router_credits
 
     // See if there is a vn_map set
@@ -104,13 +104,14 @@ LinkControl::LinkControl(ComponentId_t cid, Params &params, int vns) :
             vn_out_map[i] = vn_map_vec[i];
         }
     }
-    
+
 
     // See if we need to set up a nid map
     bool found = false;
-    job_id = params.find<int>("job_id",0,found);
+    job_id = params.find<int>("job_id",-1,found);
+    use_nid_map = params.find<bool>("use_nid_remap",false);
     if ( found ) {
-        if ( params.find<bool>("use_nid_remap",false) ) {
+        if ( use_nid_map ) {
             std::string nid_map_name = std::string("job_") + std::to_string(job_id) + "_nid_map";
 
             int job_size = params.find<int>("job_size",-1);
@@ -118,11 +119,12 @@ LinkControl::LinkControl(ComponentId_t cid, Params &params, int vns) :
                 merlin_abort.fatal(CALL_INFO,1,"LinkControl: job_size must be set\n");
             }
             logical_nid = params.find<nid_t>("logical_nid",-1);
-            if  ( logical_nid == -1 ) {
+            if ( logical_nid == -1 ) {
                 merlin_abort.fatal(CALL_INFO,1,"LinkControl: logical_nid must be set\n");
             }
-            nid_map_shm = Simulation::getSharedRegionManager()->
-                getGlobalSharedRegion(nid_map_name, job_size * sizeof(nid_t), new SharedRegionMerger());
+            // nid_map_shm = Simulation::getSharedRegionManager()->
+            //     getGlobalSharedRegion(nid_map_name, job_size * sizeof(nid_t), new SharedRegionMerger());
+            nid_map.initialize(nid_map_name, job_size * sizeof(nid_t));
         }
     }
     else {
@@ -136,34 +138,22 @@ LinkControl::LinkControl(ComponentId_t cid, Params &params, int vns) :
             if ( logical_nid == -1 ) {
                 merlin_abort.fatal(CALL_INFO,1,"LinkControl: logical_nid must be set if nid_map_name is set\n");
             }
-            nid_map_shm = Simulation::getSharedRegionManager()->
-                getGlobalSharedRegion(nid_map_name, job_size * sizeof(nid_t), new SharedRegionMerger());
+            nid_map.initialize(nid_map_name, job_size * sizeof(nid_t));
+            use_nid_map = true;
         }
     }
 
-    // create a directory to store statistic files
-    mkdir("./link_control_data/" ,0755);
-    
-    outfile = "./link_control_data/linkcontrol_job" + std::to_string(job_id) + "_" + std::to_string(logical_nid)+ "_";
 
-    FILE *file = fopen(outfile.c_str(), "w");
-    fprintf(file, "linkcontrol: jobid, msgid, src, dest, hop num, lat, send time, recv time, adp, val pos, midgroup, route_path\n");
-    fclose(file);
-    
+
     // Register statistics
     packet_latency = registerStatistic<uint64_t>("packet_latency");
     send_bit_count = registerStatistic<uint64_t>("send_bit_count");
     output_port_stalls = registerStatistic<uint64_t>("output_port_stalls");
     idle_time = registerStatistic<uint64_t>("idle_time");
+    // recv_bit_count = registerStatistic<uint64_t>("recv_bit_count");
 
-    packet_hops = registerStatistic<uint64_t>("packet_hops");
-    packet_adp = registerStatistic<uint64_t>("packet_adp");
-
-    // if(logical_nid == 0) {
-    //     output.output("\n--------  NIC --------------\n");
-    //     output.output("input buffer size %s\n", inbuf_size.toStringBestSI().c_str());
-    //     output.output("output buffer size %s\n", outbuf_size.toStringBestSI().c_str());
-    // }
+    last_time = 0;
+    last_recv_time = 0;
 }
 
 LinkControl::~LinkControl()
@@ -173,9 +163,6 @@ LinkControl::~LinkControl()
     delete [] router_credits;
     delete [] router_return_credits;
     delete [] input_queues;
-
-    // Delete shared region manager for nid map if we're using one
-    if ( nid_map_shm ) delete nid_map_shm;
 }
 
 void LinkControl::setup()
@@ -184,6 +171,26 @@ void LinkControl::setup()
         delete init_events.front();
         init_events.pop_front();
     }
+}
+
+RtrInitEvent* LinkControl::checkInitProtocol(Event* ev, RtrInitEvent::Commands command, uint32_t line, const char* file, const char* func)
+{
+    bool good = true;
+    RtrInitEvent* init_ev = nullptr;
+    // Check to make sure the event isn't null and that it is an init event
+    if ( nullptr == ev || static_cast<BaseRtrEvent*>(ev)->getType() != BaseRtrEvent::INITIALIZATION ) good = false;
+
+    if ( good ) {
+        init_ev = static_cast<RtrInitEvent*>(ev);
+
+        // Now check to make sure this is the right protocol event
+        if ( init_ev->command != command ) {
+            good = false;
+        }
+    }
+
+    sst_assert(good, line, file, func, 1, "Error during LinkControl protocol initialization.  The most likely cause of this is connecting an endpoint to a router port expecting to be connnected to another router.\n");
+    return init_ev;
 }
 
 void LinkControl::init(unsigned int phase)
@@ -198,7 +205,7 @@ void LinkControl::init(unsigned int phase)
         init_ev->command = RtrInitEvent::REPORT_BW;
         init_ev->ua_value = link_bw;
         rtr_link->sendUntimedData(init_ev);
-        
+
         // In phase zero, send the number of VNs
         RtrInitEvent* ev = new RtrInitEvent();
         ev->command = RtrInitEvent::REQUEST_VNS;
@@ -211,48 +218,36 @@ void LinkControl::init(unsigned int phase)
         // Get the link speed from the other side.  Actual link speed
         // will be the minumum the two sides
         ev = rtr_link->recvUntimedData();
-        init_ev = dynamic_cast<RtrInitEvent*>(ev);
+        init_ev = checkInitProtocol(ev, RtrInitEvent::REPORT_BW, CALL_INFO);
         if ( link_bw > init_ev->ua_value ) link_bw = init_ev->ua_value;
         delete ev;
 
         // Get the flit size from the router
         ev = rtr_link->recvUntimedData();
-        init_ev = dynamic_cast<RtrInitEvent*>(ev);
+        init_ev = checkInitProtocol(ev, RtrInitEvent::REPORT_FLIT_SIZE, CALL_INFO);
         flit_size_ua = init_ev->ua_value;
         flit_size = flit_size_ua.getRoundedValue();
         delete ev;
-        
+
         // Need to reset the time base of the output link
         UnitAlgebra link_clock = link_bw / flit_size_ua;
         TimeConverter* tc = getTimeConverter(link_clock);
         output_timing->setDefaultTimeBase(tc);
-        
+
         // Initialize links
         // Receive the endpoint ID from PortControl
         ev = rtr_link->recvUntimedData();
-        if ( ev == nullptr ) {
-            // fail
-        }
-        if ( static_cast<BaseRtrEvent*>(ev)->getType() != BaseRtrEvent::INITIALIZATION ) {
-            // fail
-        }
-        init_ev = static_cast<RtrInitEvent*>(ev);
-
-        if ( init_ev->command != RtrInitEvent::REPORT_ID ) {
-            // fail
-        }
+        init_ev = checkInitProtocol(ev, RtrInitEvent::REPORT_ID, CALL_INFO);
 
         id = init_ev->int_value;
         if ( logical_nid == -1 ) logical_nid = id;
         // If we have a nid_map, fill in my mapping
-        if ( nid_map_shm ) {
-            nid_map_shm->modifyArray(logical_nid,id);
-            nid_map_shm->publish();
-            nid_map = nid_map_shm->getPtr<const nid_t*>();
+        if ( use_nid_map ) {
+            nid_map.write(logical_nid,id);
+            nid_map.publish();
         }
-
         delete ev;
-        
+
         }
         break;
     case 2:
@@ -260,7 +255,7 @@ void LinkControl::init(unsigned int phase)
         // Will receive information about total vns used and the
         // mapping of my VNs to all of them
         ev = rtr_link->recvUntimedData();
-        init_ev = dynamic_cast<RtrInitEvent*>(ev);
+        init_ev = checkInitProtocol(ev, RtrInitEvent::REQUEST_VNS, CALL_INFO);
         total_vns = init_ev->int_value;
         delete ev;
 
@@ -275,7 +270,7 @@ void LinkControl::init(unsigned int phase)
         // Will receive a message for each of my requested vns
         for ( int i = 0; i < req_vns; ++i ) {
             ev = rtr_link->recvUntimedData();
-            init_ev = dynamic_cast<RtrInitEvent*>(ev);
+            init_ev = checkInitProtocol(ev, RtrInitEvent::REQUEST_VNS, CALL_INFO);
             // If map was not set yet, get values from router
             if ( !vn_map_set ) {
                 int vn = init_ev->int_value;
@@ -292,7 +287,8 @@ void LinkControl::init(unsigned int phase)
             router_return_credits[i] = 0;
             router_credits[i] = 0;
         }
-        
+
+
         int* vn_count = new int[total_vns];
         for ( int i = 0; i < total_vns; ++i ) vn_count[i] = 0;
 
@@ -311,7 +307,7 @@ void LinkControl::init(unsigned int phase)
             }
         }
 
-        // Instance the output queues        
+        // Instance the output queues
         int count = 0;
         vn_remap_out = new output_queue_bundle_t*[req_vns];
         output_queues = new output_queue_bundle_t[used_vns];
@@ -408,6 +404,7 @@ void LinkControl::finish(void)
         idle_time->addData(Simulation::getSimulation()->getCurrentSimCycle() - idle_start);
         is_idle = false;
     }
+
     // Clean up all the events left in the queues.  This will help
     // track down real memory leaks as all this events won't be in the
     // way.
@@ -432,9 +429,9 @@ bool LinkControl::send(SimpleNetwork::Request* req, int vn) {
     // Check to see if the VN is in range
     if ( vn >= req_vns ) return false;
     req->vn = vn;
-    
+
     // Check to see if we need to do a nid translation
-    if ( nid_map ) req->dest = nid_map[req->dest];
+    if ( use_nid_map ) req->dest = nid_map[req->dest];
 
     // Get the output queue information for that vn
     output_queue_bundle_t& out_handle = *(vn_remap_out[vn]);
@@ -443,12 +440,12 @@ bool LinkControl::send(SimpleNetwork::Request* req, int vn) {
     int real_vn = out_handle.vn;
 
     // Create a router event using id and original vn
-    // RtrEvent* ev = new RtrEvent(req,id,real_vn);
-    RtrEvent* ev = new RtrEvent(req,id,real_vn, job_id);
+    RtrEvent* ev = new RtrEvent(req,id,real_vn);
     // Fill in the number of flits
     ev->computeSizeInFlits(flit_size);
     int flits = ev->getSizeInFlits();
-    
+
+    // Check to see if there are enough credits to send
     if ( out_handle.credits < flits ) return false;
 
     // Update the credits
@@ -462,6 +459,9 @@ bool LinkControl::send(SimpleNetwork::Request* req, int vn) {
         waiting = false;
     }
 
+    // If the dest is throttled, record the packet
+    if ( congestion_state.count(req->dest) != 0 ) congestion_state[req->dest].count++;
+
     if ( ev->getTraceType() != SimpleNetwork::Request::NONE ) {
         output.output("TRACE(%d): %" PRIu64 " ns: Send on LinkControl in NIC: %s\n",ev->getTraceID(),
                       getCurrentSimTimeNano(), getName().c_str());
@@ -473,11 +473,10 @@ bool LinkControl::send(SimpleNetwork::Request* req, int vn) {
 // Returns true if there is space in the output buffer and false
 // otherwise.
 bool LinkControl::spaceToSend(int vn, int bits) {
-    if ( vn_remap_out[vn]->credits * flit_size < bits){
-        return false;
-    } 
+    if ( vn_remap_out[vn]->credits * flit_size < bits) return false;
     return true;
 }
+
 
 // Returns nullptr if no event in input_buf[vn]. Otherwise, returns
 // the next event.
@@ -505,15 +504,15 @@ SST::Interfaces::SimpleNetwork::Request* LinkControl::recv(int vn) {
     }
 
     SST::Interfaces::SimpleNetwork::Request* ret = event->takeRequest();
-    if ( nid_map ) ret->dest = logical_nid;
+    if ( use_nid_map ) ret->dest = logical_nid;
     delete event;
-; 
+;
     return ret;
 }
 
 void LinkControl::sendUntimedData(SST::Interfaces::SimpleNetwork::Request* req)
 {
-    if ( nid_map ) {
+    if ( use_nid_map ) {
         req->dest = nid_map[req->dest];
     }
     rtr_link->sendUntimedData(new RtrEvent(req,id,0));
@@ -564,18 +563,49 @@ void LinkControl::handle_input(Event* ev)
             }
         }
     }
+    else if ( base_event->getType() == BaseRtrEvent::CTRL ) {
+        CongestionEvent* cev = dynamic_cast<CongestionEvent*>(base_event);
+        if ( cev ) {
+            int target = cev->getTarget();
+            if ( cev->getBackoff() <= 1 ) {
+                // Congestion is done
+                congestion_state.erase(target);
+                delete cev;
+                return;
+            }
+
+            // Check to see if this is new
+            auto result = congestion_state.emplace(target,cev->getBackoff());
+            // First item is the iterator
+            auto cs = result.first;
+
+            // Second item is true if this is new and false otherwise
+            if ( result.second ) {
+                // This is a new throttle.
+
+                // Need to count all the events I have targeting this
+                // dest
+                for ( int i = 0; i < used_vns; ++i ) {
+                    size_t size = output_queues[i].queue.size();
+                    for ( int j = 0; j < size; ++j ) {
+                        auto item = output_queues[i].queue.front();
+                        output_queues[i].queue.pop();
+                        output_queues[i].queue.push(item);
+                        if ( item->getDest() == target ) {
+                            cs->second.count++;
+                        }
+                    }
+                }
+            }
+
+            cs->second.backoff = cev->getBackoff();
+            SimTime_t throttle_time = getCurrentSimCycle() + cev->getThrottleTime();
+            if ( cs->second.throttle_time < throttle_time ) cs->second.throttle_time = throttle_time;
+            delete cev;
+        }
+    }
     else {
         RtrEvent* event = static_cast<RtrEvent*>(ev);
-        assert(job_id == event->getJobId());
-        if(id != event->getDest()){
-            printf("linkcontrol: id %ld rev msg: [%d, %ld => %ld]\n", id, event->getTraceID(), event->getTrustedSrc(), event->getDest() );
-            for(int rtr : event->route_path){
-                printf("%d ", rtr );
-            }
-            printf("\n");
-        }
-        assert(id == event->getDest());
-    
         // Simply put the event into the right virtual network queue
         // int orig_vn = event->getOriginalVN();
         int vn = event->getLogicalVN();
@@ -596,37 +626,9 @@ void LinkControl::handle_input(Event* ev)
                           event->getTrustedSrc());
         }
 
-        SimTime_t tmp_cur = getCurrentSimTimeNano();
-        SimTime_t lat = tmp_cur - event->getInjectionTime();
+        SimTime_t lat = getCurrentSimTimeNano() - event->getInjectionTime();
+        // recv_bit_count->addData(event->getSizeInBits());
         packet_latency->addData(lat);
-
-        char buffer[300];
-        int s_len = sprintf(buffer, "%d,%d,%" PRId64 ",%" PRId64 ",%d,%" PRIu64 ",%" PRIu64 ",%" PRId64 ",|,",
-            job_id, event->getTraceID(), event->getTrustedSrc(), event->getDest(),
-            event->getNumHops(), lat, event->getInjectionTime(), tmp_cur);
-        //, event->getAdpRouted(), event->val_route_pos, event->midgroup %d,%d,%d,
-
-        assert(event->getNumHops() + 1 == event->route_path.size());
-
-        std::string buff_str(buffer);
-
-        // record msg full path
-        // for(int rtr : event->route_path){
-        //     buff_str += (std::to_string(rtr) + ",");
-        // }
-
-        buff_str += "\n";
-        const char *buf_2write = buff_str.c_str();
-
-        FILE *file = fopen(outfile.c_str(), "a");
-        fprintf(file, buf_2write);
-        fclose(file);
-
-        uint64_t hops = (uint64_t)event->getNumHops();
-        packet_hops->addData(hops);
-        if(event->getAdpRouted())
-            packet_adp->addData(1);
-
         if ( receiveFunctor != nullptr ) {
             bool keep = (*receiveFunctor)(vn);
             if ( !keep) receiveFunctor = nullptr;
@@ -645,25 +647,37 @@ void LinkControl::handle_output(Event* ev)
 
     // We do a round robin scheduling.  If the current vn has no
     // data, find one that does.
-
     int vn_to_send = -1;
     bool found = false;
+    bool found_has_throttle = false;
+    SimTime_t block_throttle = 0;
     RtrEvent* send_event = nullptr;
     have_packets = false;
     for ( int i = curr_out_vn; i < used_vns; i++ ) {
         if ( output_queues[i].queue.empty() ) continue;
         have_packets = true;
         send_event = output_queues[i].queue.front();
-
         // Check to see if the needed VN has enough space
         if ( router_credits[output_queues[i].vn] < send_event->getSizeInFlits() ) continue;
-        
+        // Check to see if there is a congestion event
+        int target = send_event->getDest();
+        if ( congestion_state.count(target) == 1 ) {
+            // See if we can send yet
+            if ( getCurrentSimCycle() < congestion_state[target].throttle_time ) {
+                // Need to track that we could have sent but didn't
+                // because of throttle_time
+                if ( block_throttle < congestion_state[target].throttle_time ) block_throttle = congestion_state[target].throttle_time;
+                continue;
+            }
+            found_has_throttle = true;
+        }
+
         vn_to_send = i;
         output_queues[i].queue.pop();
         found = true;
         break;
     }
-    
+
     if (!found)  {
         for ( int i = 0; i < curr_out_vn; i++ ) {
             if ( output_queues[i].queue.empty() ) continue;
@@ -671,6 +685,17 @@ void LinkControl::handle_output(Event* ev)
             send_event = output_queues[i].queue.front();
             // Check to see if the needed VN has enough space
             if ( router_credits[output_queues[i].vn] < send_event->getSizeInFlits() ) continue;
+            // Check to see if there is a congestion event
+            int target = send_event->getDest();
+            if ( congestion_state.count(target) == 1 ) {
+                // See if we can send yet
+                if ( getCurrentSimCycle() < congestion_state[target].throttle_time ) {
+                    if ( block_throttle < congestion_state[target].throttle_time ) block_throttle = congestion_state[target].throttle_time;
+                    continue;
+                }
+                found_has_throttle = true;
+            }
+
             vn_to_send = i;
             output_queues[i].queue.pop();
             found = true;
@@ -681,20 +706,32 @@ void LinkControl::handle_output(Event* ev)
     if ( found ) {
         // Need to return credits to the output buffer
         int size = send_event->getSizeInFlits();
-        // outbuf_credits[vn_to_send] += size;
         output_queues[vn_to_send].credits += size;
 
         // Send an event to wake up again after this packet is sent.
         output_timing->send(size,nullptr);
-        
+        if ( found_has_throttle ) {
+            CongestionState& info = congestion_state[send_event->getDest()];
+            info.throttle_time = getCurrentSimCycle() + (size * output_timing->getDefaultTimeBase()->getFactor() * (2+info.backoff));
+
+            // Subtract from the count for the stream
+            info.count--;
+            if ( info.count == 0 ) {
+                // Need to send an event to let router know stream is
+                // over
+                CongestionEvent* cev = new CongestionEvent(0, id, 0, 0);
+                cev->setRtrDestByEndpoint(send_event->getDest());
+                rtr_link->send(/*size,*/cev);
+            }
+        }
+
         curr_out_vn = vn_to_send + 1;
         if ( curr_out_vn == used_vns ) curr_out_vn = 0;
 
         // Add in inject time so we can track latencies
-        // send_event->setInjectionTime(getCurrentSimTimeNano());
+        send_event->setInjectionTime(getCurrentSimTimeNano());
 
         // Subtract credits
-        // rtr_credits[vn_to_send] -= size;
         router_credits[output_queues[vn_to_send].vn] -= size;
 
 		if (is_idle){
@@ -703,6 +740,8 @@ void LinkControl::handle_output(Event* ev)
         }
 
         rtr_link->send(send_event);
+        last_recv_time = getCurrentSimCycle();
+        sent++;
 
         if ( send_event->getTraceType() == SimpleNetwork::Request::FULL ) {
             output.output("TRACE(%d): %" PRIu64 " ns: Sent an event to router from LinkControl"
@@ -739,9 +778,19 @@ void LinkControl::handle_output(Event* ev)
             idle_time->addData(Simulation::getSimulation()->getCurrentSimCycle() - idle_start);
             is_idle = false;
         }
+        if ( block_throttle != 0 ) {
+            // Didn't send anything because it was throttled.  Need to
+            // send a wake-up.
+            congestion_timing->send(block_throttle - getCurrentSimCycle(),nullptr);
+        }
     }
 }
 
+void LinkControl::handle_congestion(Event* ev)
+{
+    if ( waiting ) output_timing->send(0,nullptr);
+    waiting = false;
+}
 
 } // namespace Merlin
 } // namespace SST

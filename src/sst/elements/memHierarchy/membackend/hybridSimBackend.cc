@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -22,9 +22,7 @@
 using namespace SST;
 using namespace SST::MemHierarchy;
 
-HybridSimMemory::HybridSimMemory(ComponentId_t id, Params &params) : SimpleMemBackend(id, params){ build(params); }
-
-void HybridSimMemory::build(Params& params) {
+HybridSimMemory::HybridSimMemory(ComponentId_t id, Params &params) : SimpleMemBackend(id, params){ 
     output->init("@R:HybridSimMemory::@p():@l " + getName() + ": ", 0, 0,
                          (Output::output_location_t)params.find<int>("debug", 0));
     std::string hybridIniFilename = params.find<std::string>("system_ini", NO_STRING_DEFINED);

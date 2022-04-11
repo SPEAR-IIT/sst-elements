@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -35,6 +35,11 @@ public:
     )
 
     SST_ELI_DOCUMENT_PARAMS(
+       {   "arg.stream_n",         "Sets the size number of items to stream",   "1024"},
+       {   "arg.n_per_call_copy",  "Sets the size of the copy ",   "1000"},
+       {   "arg.n_per_call_triad", "Sets the size of the triad",   "1000"},
+       {   "arg.operandwidth",     "Sets the operand width",   "8"},
+       {   "arg.n_loops",          "Sets the number of loops",   "2"},
     )
 
     SST_ELI_DOCUMENT_STATISTICS(

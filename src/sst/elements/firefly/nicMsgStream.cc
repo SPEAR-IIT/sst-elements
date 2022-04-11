@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -22,7 +22,7 @@ using namespace SST::Firefly;
 
 Nic::RecvMachine::MsgStream::MsgStream( Output& output, Ctx* ctx,
         int srcNode, int srcPid, int destPid, FireflyNetworkEvent* ev ) :
-    StreamBase(output,ctx,srcNode,srcPid,destPid), m_blocked(false)
+    StreamBase(output,ctx,srcNode,srcPid,destPid), m_blockedFirstPktDelay(false)
 {
     m_unit = m_ctx->allocRecvUnit();
     m_dbg.debug(CALL_INFO,1,NIC_DBG_RECV_STREAM,"%p\n",this);
@@ -39,9 +39,10 @@ Nic::RecvMachine::MsgStream::MsgStream( Output& output, Ctx* ctx,
 
     Callback callback;
     if ( NULL== m_recvEntry ) {
-        callback =  std::bind( &Nic::RecvMachine::StreamBase::needRecv, this, ev );
+        m_hdrPkt = ev;
+        callback =  std::bind( &Nic::RecvMachine::StreamBase::needRecv, this );
     } else {
-        m_blocked = true;
+        m_blockedFirstPktDelay = true;
         ev->bufPop( sizeof(MsgHdr) + sizeof(MatchMsgHdr) );
         ev->clearHdr();
         callback = std::bind( &Nic::RecvMachine::MsgStream::processFirstPkt, this, ev );

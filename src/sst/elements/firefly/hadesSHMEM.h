@@ -1,8 +1,8 @@
-// Copyright 2013-2020 NTESS. Under the terms
+// Copyright 2013-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2013-2020, NTESS
+// Copyright (c) 2013-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -62,6 +62,11 @@ class HadesSHMEM : public Shmem::Interface
         {"enterLat_ns","Sets the latency of entering a SHMEM call","" },
         {"returnLat_ns","Sets the latency of returning from a SHMEM call","" },
         {"blockingReturnLat_ns","Sets the latency of returning from a SHMEM call that blocked on response","" },
+
+		/* PARAMS passed to another module
+			famNodeMapper.*
+			famAddrMapper.*
+		*/
     )
 
     typedef std::function<void()> Callback;

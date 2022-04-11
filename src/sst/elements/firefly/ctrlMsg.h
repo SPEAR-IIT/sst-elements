@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -66,7 +66,14 @@ class API : public ProtocolAPI {
         SST::Firefly::CtrlMsg::API
     )
 
-    SST_ELI_DOCUMENT_PARAMS()
+    SST_ELI_DOCUMENT_PARAMS(
+		{"verboseLevel","Sets the output level","0"},
+		{"verboseMask","Sets the output mask","-1"},
+		{"sendStateDelay_ps","Sets the send exit delay","0"},
+		{"recvStateDelay_ps","Sets the recv exit delay","0"},
+		{"waitallStateDelay_ps","Sets the waitall delay","0"},
+		{"waitanyStateDelay_ps","Sets the waitany delay","0"},
+	)
 
     API( ComponentId_t id, Params& );
     ~API();

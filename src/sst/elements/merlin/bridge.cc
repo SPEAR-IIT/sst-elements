@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -27,7 +27,7 @@ Bridge::Bridge(SST::ComponentId_t id, SST::Params &params) :
     dbg.init("@t:Bridge::@p():@l " + getName() + ": ",
             debugLevel, 0, (Output::output_location_t)params.find<int>("debug", 0));
 
-    Params transParams = params.find_prefix_params("translator.");
+    Params transParams = params.get_scoped_params("translator");
     // translator = dynamic_cast<Translator*>(loadSubComponent(
     //             params.find<std::string>("translator"),
     //             this, transParams));

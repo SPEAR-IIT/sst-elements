@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -42,15 +42,15 @@ public:
     )
 
     SST_ELI_DOCUMENT_PARAMS(
-        {   "arg.iterations",       "Sets the number of ping pong operations to perform",   "1"},
-        {   "arg.printmap",         "Prints a map of blocks to ranks (=\"no\" or \"yes\")", "no" },
+        {   "arg.verbose",          "Sets the verbosity of the output", "0" },
+        {   "arg.nx",               "Sets the size of a block in X", "8" },
+        {   "arg.ny",               "Sets the size of a block in Y", "8" },
+        {   "arg.nz",               "Sets the size of a block in Z", "8" },
+        {   "arg.fieldspercell",    "Sets the number of fields per mesh cell", "8" },
         {   "arg.blockfile",        "File containing the 3D AMR blocks (from MiniAMR)",     "blocks.amr"},
-        {       "arg.nx",               "Sets the size of a block in X", "8" },
-        {       "arg.ny",                       "Sets the size of a block in Y", "8" },
-        {       "arg.nz",                       "Sets the size of a block in Z", "8" },
-        {       "arg.filetype",                 "Mesh file type, set to \'binary\' or \'text\'", "text" },
-        {       "arg.fieldspercell",            "Sets the number of fields per mesh cell", "8" },
-        {       "arg.verbose",                  "Sets the verbosity of the output", "0" },
+        {   "arg.filetype",         "Mesh file type, set to \'binary\' or \'text\'", "text" },
+        {   "arg.printmap",         "Prints a map of blocks to ranks (=\"no\" or \"yes\")", "no" },
+        {   "arg.iterations",       "Sets the number of ping pong operations to perform",   "1"},
     )
 
     SST_ELI_DOCUMENT_STATISTICS(

@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -33,6 +33,8 @@ public:
 
     SST_ELI_DOCUMENT_STATISTICS(
         /* Event hits & misses */
+        {"CacheHits",               "Acceses that hit in the cache", "accesses", 1},
+        {"CacheMisses",             "Acceses that missed in the cache", "accesses", 1},
         {"GetSHit_Arrival",         "GetS was handled at arrival and was a cache hit", "count", 1},
         {"GetXHit_Arrival",         "GetX was handled at arrival and was a cache hit", "count", 1},
         {"GetSXHit_Arrival",        "GetSX was handled at arrival and was a cache hit", "count", 1},
@@ -279,7 +281,7 @@ public:
         uint64_t dLines = params.find<uint64_t>("dlines");
         uint64_t dAssoc = params.find<uint64_t>("dassoc");
         params.insert("replacement_policy", params.find<std::string>("drpolicy", "lru"));
-        ReplacementPolicy *drmgr = createReplacementPolicy(dLines, dAssoc, params, 1, false);
+        ReplacementPolicy *drmgr = createReplacementPolicy(dLines, dAssoc, params, false, 1);
         dirArray_ = new CacheArray<DirectoryLine>(debug, dLines, dAssoc, lineSize_, drmgr, ht);
         dirArray_->setBanked(params.find<uint64_t>("banks", 0));
 
@@ -446,6 +448,8 @@ public:
         stat_miss[0][1] = registerStatistic<uint64_t>("GetSMiss_Blocked");
         stat_miss[1][1] = registerStatistic<uint64_t>("GetXMiss_Blocked");
         stat_miss[2][1] = registerStatistic<uint64_t>("GetSXMiss_Blocked");
+        stat_hits = registerStatistic<uint64_t>("CacheHits");
+        stat_misses = registerStatistic<uint64_t>("CacheMisses");
 
         /* Prefetch statistics */
         if (prefetch) {
@@ -640,6 +644,8 @@ private:
     Statistic<uint64_t>* stat_latencyFlushLineInv;
     Statistic<uint64_t>* stat_hit[3][2];
     Statistic<uint64_t>* stat_miss[3][2];
+    Statistic<uint64_t>* stat_hits;
+    Statistic<uint64_t>* stat_misses;
 
 
 };

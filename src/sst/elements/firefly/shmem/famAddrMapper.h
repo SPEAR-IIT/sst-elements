@@ -1,8 +1,8 @@
-// Copyright 2013-2020 NTESS. Under the terms
+// Copyright 2013-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2013-2020, NTESS
+// Copyright (c) 2013-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -49,6 +49,12 @@ class RR_FamAddrMapper : public FamAddrMapper {
         "",
         "SST::Firefly::RR_FamAddrMapper"
     )
+
+	SST_ELI_DOCUMENT_PARAMS(
+		{"bytesPerNode","Sets bytes per FAM node","16MiB"},
+		{"blockSize","Sets block size","4KiB"},
+		{"numNodes","Sets number of FAM nodes","0"},
+	)
 
   public:
 	RR_FamAddrMapper( Params& params ) {

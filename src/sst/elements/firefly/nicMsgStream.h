@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -20,13 +20,13 @@ class MsgStream : public StreamBase {
         m_dbg.debug(CALL_INFO,1,NIC_DBG_RECV_STREAM,"\n");
     }
     bool isBlocked() {
-        return  m_recvEntry == NULL || m_blocked;
+        return m_hdrPkt || m_blockedFirstPktDelay || StreamBase::isBlocked();
     }
   protected:
     void processFirstPkt( FireflyNetworkEvent* ev ) {
-        m_blocked = false;
-        processPkt(ev);
+        m_blockedFirstPktDelay = false;
+        processPktBody(ev);
     }
   private:
-    bool m_blocked;
+    bool m_blockedFirstPktDelay;
 };

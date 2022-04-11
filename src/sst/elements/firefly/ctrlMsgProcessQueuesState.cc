@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -37,11 +37,16 @@ ProcessQueuesState::ProcessQueuesState( ComponentId_t id, Params& params ) :
         m_numSent(0),
         m_numRecv(0),
         m_rendezvousVN(0),
-        m_ackVN(0)
+        m_ackVN(0),
+        m_recvdMsgQ(2),
+        m_recvdMsgQpos(0)
 {
     int level = params.find<uint32_t>("pqs.verboseLevel",0);
     int mask = params.find<int32_t>("pqs.verboseMask",-1);
     m_nicsPerNode = params.find<int32_t>("nicsPerNode",1);
+    m_maxUnexpectedMsg = params.find<int32_t>("pqs.maxUnexpectedMsg",32);
+    m_maxPostedShortBuffers = params.find<int32_t>("pqs.maxPostedShortBuffers",512); 
+    m_minPostedShortBuffers = params.find<int32_t>("pqs.minPostedShortBuffers",5); 
 
     m_dbg.init("", level, mask, Output::STDOUT );
 
@@ -97,8 +102,8 @@ void ProcessQueuesState::setVars( VirtNic* nic, Info* info, MemoryBase* mem,
 }
 
 void ProcessQueuesState:: finish() {
-    dbg().debug(CALL_INFO,1,1,"pstdRcvQ=%lu recvdMsgQ=%lu loopResp=%lu funcStack=%lu sent=%d recv=%zu\n",
-    m_pstdRcvQ.size(), m_recvdMsgQ.size(), m_loopResp.size(), m_funcStack.size(), m_numSent, m_numRecv+m_recvdMsgQ.size() );
+    dbg().debug(CALL_INFO,1,1,"pstdRcvQ=%lu recvdMsgQ=%s loopResp=%lu funcStack=%lu sent=%d recv=%d\n",
+    m_pstdRcvQ.size(), recvdMsgQsize(), m_loopResp.size(), m_funcStack.size(), m_numSent, m_numRecv );
 }
 
 void ProcessQueuesState::enterInit( bool haveGlobalMemHeap )
@@ -106,10 +111,8 @@ void ProcessQueuesState::enterInit( bool haveGlobalMemHeap )
     dbg().debug(CALL_INFO,1,1,"%s\n",haveGlobalMemHeap?"use global memory heap":"");
 
     size_t length = 0;
-    length += MaxPostedShortBuffers * (sizeof(MatchHdr) + 16 ) & ~15;
-    length += MaxPostedShortBuffers * (shortMsgLength() + 16 ) & ~15;
-    length += MaxPostedShortBuffers * (sizeof(MatchHdr) + 16 ) & ~15;
-    length += MaxPostedShortBuffers * (shortMsgLength() + 16 ) & ~15;
+    length += ( m_maxPostedShortBuffers + m_maxUnexpectedMsg ) * (sizeof(MatchHdr) + 16 ) & ~15;
+    length += ( m_maxPostedShortBuffers + m_maxUnexpectedMsg ) * (shortMsgLength() + 16 ) & ~15;
 
     std::function<void(uint64_t)> callback = [=](uint64_t addr){
 		enterInit_1( addr, length );
@@ -129,7 +132,7 @@ void ProcessQueuesState::enterInit_1( uint64_t addr, size_t length )
 
     m_simVAddrs = new HeapAddrs( addr, length );
 
-    for ( unsigned long i = 0; i < MinPostedShortBuffers; i++ ) {
+    for ( unsigned long i = 0; i < m_minPostedShortBuffers; i++ ) {
         postShortRecvBuffer();
     }
 
@@ -251,7 +254,7 @@ void ProcessQueuesState::processSend_2( _CommReq* req )
     m_nic->pioSend( vn, nid, ShortMsgQ, vec, callback);
 
     if ( ! req->isBlocking() ) {
-        exit();
+        enterMakeProgress(m_exitDelay);
     } else {
         enterWait( new WaitReq( req ), m_exitDelay );
     }
@@ -275,7 +278,7 @@ void ProcessQueuesState::processSendLoop( _CommReq* req )
     loopSendReq( vec, m_nic->calcCoreId( calcNid( req, req->getDestRank() ), m_nicsPerNode ), req );
 
     if ( ! req->isBlocking() ) {
-        exit();
+        enterMakeProgress(m_exitDelay);
     } else {
         enterWait( new WaitReq( req ), m_exitDelay );
     }
@@ -283,10 +286,10 @@ void ProcessQueuesState::processSendLoop( _CommReq* req )
 
 void ProcessQueuesState::enterRecv( _CommReq* req, uint64_t exitDelay )
 {
-    dbg().debug(CALL_INFO,1,DBG_MSK_PQS_APP_SIDE,"req=%p$ delay=%" PRIu64 " rank=%d\n", req, exitDelay, req->hdr().rank );
+    dbg().debug(CALL_INFO,1,DBG_MSK_PQS_APP_SIDE,"req=%p delay=%" PRIu64 " rank=%d\n", req, exitDelay, req->hdr().rank );
     m_exitDelay = exitDelay;
 
-    if ( m_postedShortBuffers.size() < MaxPostedShortBuffers ) {
+    if ( m_postedShortBuffers.size() < m_maxPostedShortBuffers ) {
         if ( m_numNicRequestedShortBuff ) {
             --m_numNicRequestedShortBuff;
         } else if ( m_numRecvLooped ) {
@@ -295,8 +298,6 @@ void ProcessQueuesState::enterRecv( _CommReq* req, uint64_t exitDelay )
             postShortRecvBuffer();
         }
     }
-
-    m_pstdRcvQ.push_front( req );
 
     m_statPstdRcv->addData( m_pstdRcvQ.size() );
 
@@ -327,34 +328,74 @@ void ProcessQueuesState::processRecv_0( _CommReq* req )
 
 void ProcessQueuesState::processRecv_1( _CommReq* req )
 {
-    if ( ! req->isBlocking() ) {
-        exit();
+    if ( ! m_unexpectedMsgQ.empty() ) {
+
+        dbg().debug(CALL_INFO,2,DBG_MSK_PQS_APP_SIDE,"check unexpected queue\n");
+
+        assert( m_pstdRcvPreQ.empty() );
+        m_pstdRcvPreQ.push_back( req );
+
+        ProcessQueuesCtx* ctx = new ProcessQueuesCtx(
+            std::bind( &ProcessQueuesState::processRecv_2, this, &m_funcStack, req )
+        );
+
+        m_funcStack.push_back( ctx );
+        processShortList_0( &m_funcStack );
     } else {
-        enterWait( new WaitReq( req ), m_exitDelay );
+        dbg().debug(CALL_INFO,2,DBG_MSK_PQS_APP_SIDE,"post receive\n");
+        m_pstdRcvQ.push_back( req );
+        processRecv_2( NULL, req );
+    }
+}
+
+void ProcessQueuesState::processRecv_2( Stack* stack, _CommReq* req )
+{
+    dbg().debug(CALL_INFO,2,DBG_MSK_PQS_APP_SIDE,"\n");
+    if ( stack ) {
+        delete stack->back();
+        stack->pop_back();
+    }
+
+    if ( ! m_pstdRcvPreQ.empty() ) {
+        dbg().debug(CALL_INFO,2,DBG_MSK_PQS_APP_SIDE,"no match against unexpected queue move to pstRecvQ\n");
+        m_pstdRcvQ.push_back( m_pstdRcvPreQ.front() );
+        m_pstdRcvPreQ.clear();
+    }
+
+    if ( ! req->isBlocking() || req->isDone() ) {
+        dbg().debug(CALL_INFO,2,DBG_MSK_PQS_APP_SIDE,"exit\n");
+		enterMakeProgress( m_exitDelay );
+    } else {
+        WaitCtx* ctx = new WaitCtx ( new WaitReq(req),
+            std::bind( &ProcessQueuesState::processWait_0, this, &m_funcStack )
+        );
+        dbg().debug(CALL_INFO,2,DBG_MSK_PQS_APP_SIDE,"enable interrupts\n");
+        enableInt( ctx, &ProcessQueuesState::processWait_0 );
     }
 }
 
 void ProcessQueuesState::enterMakeProgress(  uint64_t exitDelay  )
 {
-    dbg().debug(CALL_INFO,1,DBG_MSK_PQS_APP_SIDE,"num pstd %lu, num short %lu\n",
-                            m_pstdRcvQ.size(), m_recvdMsgQ.size() );
+    dbg().debug(CALL_INFO,1,DBG_MSK_PQS_APP_SIDE,"num pstd %lu, rcvdMsgQ %s\n",
+                            m_pstdRcvQ.size(), recvdMsgQsize() );
 
     m_exitDelay = exitDelay;
 
-    WaitCtx* ctx = new WaitCtx ( NULL,
-        std::bind( &ProcessQueuesState::processMakeProgress, this, &m_funcStack )
-    );
+    if ( m_recvdMsgQ[m_recvdMsgQpos].empty() ) {
+        exit();
+    } else {
+        WaitCtx* ctx = new WaitCtx ( NULL,
+            std::bind( &ProcessQueuesState::processMakeProgress, this, &m_funcStack )
+        );
 
-    m_funcStack.push_back( ctx );
-
-    processQueues( &m_funcStack );
+        enableInt( ctx, &ProcessQueuesState::processMakeProgress );
+    }
 }
 
 void ProcessQueuesState::processMakeProgress( Stack* stack )
 {
     dbg().debug(CALL_INFO,2,DBG_MSK_PQS_APP_SIDE,"stack.size()=%lu\n", stack->size());
-    dbg().debug(CALL_INFO,2,DBG_MSK_PQS_APP_SIDE,"num pstd %lu, num short %lu\n",
-                            m_pstdRcvQ.size(), m_recvdMsgQ.size() );
+    dbg().debug(CALL_INFO,2,DBG_MSK_PQS_APP_SIDE,"num pstd %lu, recvdMsgQ %s\n", m_pstdRcvQ.size(), recvdMsgQsize() );
     WaitCtx* ctx = static_cast<WaitCtx*>( stack->back() );
 
 	delete ctx;
@@ -377,7 +418,7 @@ void ProcessQueuesState::enterCancel( MP::MessageRequest req, uint64_t exitDelay
 			break;
 		}
     }
-	exit();
+    enterMakeProgress(m_exitDelay);
 }
 
 void ProcessQueuesState::enterTest( WaitReq* req, int* flag, uint64_t exitDelay  )
@@ -393,13 +434,12 @@ void ProcessQueuesState::enterTest( WaitReq* req, int* flag, uint64_t exitDelay 
 
     m_funcStack.push_back( ctx );
 
-    processQueues( &m_funcStack );
+    processWait_0( &m_funcStack );
 }
 
 void ProcessQueuesState::enterWait( WaitReq* req, uint64_t exitDelay  )
 {
-    dbg().debug(CALL_INFO,1,DBG_MSK_PQS_APP_SIDE,"num pstd %lu, num short %lu\n",
-                            m_pstdRcvQ.size(), m_recvdMsgQ.size() );
+    dbg().debug(CALL_INFO,1,DBG_MSK_PQS_APP_SIDE,"num pstd %lu, recvdMsgQ %s\n", m_pstdRcvQ.size(), recvdMsgQsize() );
 
     m_exitDelay = exitDelay;
 
@@ -409,14 +449,14 @@ void ProcessQueuesState::enterWait( WaitReq* req, uint64_t exitDelay  )
 
     m_funcStack.push_back( ctx );
 
-    processQueues( &m_funcStack );
+    processWait_0( &m_funcStack );
 }
 
 void ProcessQueuesState::processWait_0( Stack* stack )
 {
-    dbg().debug(CALL_INFO,2,DBG_MSK_PQS_APP_SIDE,"stack.size()=%lu\n", stack->size());
-    dbg().debug(CALL_INFO,2,DBG_MSK_PQS_APP_SIDE,"num pstd %lu, num short %lu\n",
-                            m_pstdRcvQ.size(), m_recvdMsgQ.size() );
+    dbg().debug(CALL_INFO,2,DBG_MSK_PQS_APP_SIDE,"stack.size()=%lu num pstd %lu, recvdMsgQ %s\n",
+        stack->size(), m_pstdRcvQ.size(), recvdMsgQsize() );
+
     WaitCtx* ctx = static_cast<WaitCtx*>( stack->back() );
 
     stack->pop_back();
@@ -425,13 +465,17 @@ void ProcessQueuesState::processWait_0( Stack* stack )
 
     _CommReq* req = ctx->req->getFiniReq();
 
+    // a part of this WaitCtx is done
     if ( req ) {
         processWaitCtx_0( ctx, req );
+    // the wait request is complete
     } else if ( ctx->flag ) {
         delete ctx;
-        exit();
+        enterMakeProgress(m_exitDelay);
     } else {
-        processWaitCtx_2( ctx );
+        // WaitCtx is blocked
+        dbg().debug(CALL_INFO,2,DBG_MSK_PQS_APP_SIDE,"blocking call enableInt() return to processWait_0()\n");
+        enableInt( ctx, &ProcessQueuesState::processWait_0 );
     }
 }
 
@@ -482,19 +526,25 @@ void ProcessQueuesState::processWaitCtx_2( WaitCtx* ctx )
             *ctx->flag = 1;
         }
         delete ctx;
-        exit( );
+        enterMakeProgress(m_exitDelay);
     } else {
+        dbg().debug(CALL_INFO,2,DBG_MSK_PQS_APP_SIDE,"blocking call enableInt() return to processWait_0()\n");
 		enableInt( ctx, &ProcessQueuesState::processWait_0 );
     }
 }
 
 void ProcessQueuesState::processQueues( Stack* stack )
 {
-    dbg().debug(CALL_INFO,1,DBG_MSK_PQS_Q,"shortMsgV.size=%lu\n", m_recvdMsgQ.size() );
+    dbg().debug(CALL_INFO,1,DBG_MSK_PQS_Q,"recvdMsgQ=%s m_unexpectedMsgQ=%zu m_pstdRecvPre=%zu m_pstdRcvQ=%zu\n",
+							recvdMsgQsize(), m_unexpectedMsgQ.size(), m_pstdRcvPreQ.size(), m_pstdRcvQ.size() );
     dbg().debug(CALL_INFO,1,DBG_MSK_PQS_Q,"stack.size()=%lu\n", stack->size());
 
-    // this does not cost time
-    while ( m_needRecv ) {
+    assert ( ! m_intStack.empty() );
+
+    while ( m_needRecv && m_numNicRequestedShortBuff < m_maxUnexpectedMsg ) {
+        dbg().debug(CALL_INFO,1,DBG_MSK_PQS_Q,"post buff for needRecv %d m_numNicRequestedShortBuff=%d\n",
+									m_needRecv, m_numNicRequestedShortBuff);
+
         ++m_numNicRequestedShortBuff;
         postShortRecvBuffer();
         --m_needRecv;
@@ -523,7 +573,7 @@ void ProcessQueuesState::processQueues( Stack* stack )
 
         m_longGetFiniQ.pop_front();
 
-    } else if ( ! m_recvdMsgQ.empty() ) {
+    } else if ( ! m_recvdMsgQ[m_recvdMsgQpos].empty()  ) {
 
         ProcessQueuesCtx* ctx = new ProcessQueuesCtx(
                 bind ( &ProcessQueuesState::processQueues0, this, stack )
@@ -538,8 +588,8 @@ void ProcessQueuesState::processQueues( Stack* stack )
 
 void ProcessQueuesState::processQueues0( Stack* stack )
 {
-    dbg().debug(CALL_INFO,2,DBG_MSK_PQS_Q,"stack.size()=%lu recvdMsgQ.size()=%lu\n",
-            stack->size(), m_recvdMsgQ.size() );
+    dbg().debug(CALL_INFO,2,DBG_MSK_PQS_Q,"stack.size()=%lu recvdMsgQ=%s\n",
+            stack->size(), recvdMsgQsize() );
 
     delete stack->back();
     stack->pop_back();
@@ -548,11 +598,20 @@ void ProcessQueuesState::processQueues0( Stack* stack )
 
 void ProcessQueuesState::processShortList_0( Stack* stack )
 {
-    dbg().debug(CALL_INFO,2,DBG_MSK_PQS_Q,"stack.size()=%lu recvdMsgQ.size()=%lu\n",
-            stack->size(), m_recvdMsgQ.size() );
+    dbg().debug(CALL_INFO,2,DBG_MSK_PQS_Q,"stack.size()=%lu recvdMsgQ=%s\n",
+            stack->size(), recvdMsgQsize() );
 
-    ProcessShortListCtx* ctx = new ProcessShortListCtx( m_recvdMsgQ );
-	m_recvdMsgQ.clear();
+    ProcessShortListCtx* ctx;
+    if ( m_intStack.empty() ) {
+        dbg().debug(CALL_INFO,2,DBG_MSK_PQS_Q,"use unexpectedMsgQ %zu\n",m_unexpectedMsgQ.size());
+        ctx = new ProcessShortListCtx( &m_unexpectedMsgQ );
+    } else {
+        dbg().debug(CALL_INFO,2,DBG_MSK_PQS_Q,"use recvdMsgQ pos=%d\n",m_recvdMsgQpos);
+        ctx = new ProcessShortListCtx( &m_recvdMsgQ[m_recvdMsgQpos] );
+        ++m_recvdMsgQpos;
+        m_recvdMsgQpos %= 2;
+    }
+
     stack->push_back( ctx );
 
     processShortList_1( stack );
@@ -560,14 +619,18 @@ void ProcessQueuesState::processShortList_0( Stack* stack )
 
 void ProcessQueuesState::processShortList_1( Stack* stack )
 {
-    dbg().debug(CALL_INFO,2,DBG_MSK_PQS_Q,"stack.size()=%lu recvdMsgQ.size()=%lu\n",
-                        stack->size(), m_recvdMsgQ.size() );
+    dbg().debug(CALL_INFO,2,DBG_MSK_PQS_Q,"stack.size()=%lu recvdMsgQ=%s\n",
+                        stack->size(), recvdMsgQsize() );
 
     ProcessShortListCtx* ctx =
                         static_cast<ProcessShortListCtx*>( stack->back() );
 
     int count = 0;
-    ctx->req = searchPostedRecv( ctx->hdr(), count );
+    if ( m_intStack.empty() ) {
+        ctx->req = searchPostedRecv( m_pstdRcvPreQ, ctx->hdr(), count );
+    } else {
+        ctx->req = searchPostedRecv( m_pstdRcvQ, ctx->hdr(), count );
+    }
 
     m_mem->walk(
         std::bind( &ProcessQueuesState::processShortList_2, this, stack ),
@@ -588,7 +651,12 @@ void ProcessQueuesState::processShortList_2( Stack* stack )
             rxDelay( ctx->hdr().count * ctx->hdr().dtypeSize )
         );
     } else {
-        ctx->incPos();
+        if ( m_intStack.empty() ) {
+            ctx->incPos();
+        } else {
+            m_unexpectedMsgQ.push_back( ctx->msg() );
+            ctx->unlinkMsg();
+        }
         processShortList_5( stack );
     }
 }
@@ -642,7 +710,7 @@ void ProcessQueuesState::processShortList_4( Stack* stack )
         loopSendResp( loopReq->srcCore , loopReq->key );
 
     } else if ( length <= shortMsgLength() ) {
-        dbg().debug(CALL_INFO,2,DBG_MSK_PQS_Q,"short\n");
+        dbg().debug(CALL_INFO,2,DBG_MSK_PQS_Q,"short req=%p\n", req);
         req->setDone( recvReqFiniDelay( length ) );
         ++m_numRecv;
     } else {
@@ -660,6 +728,10 @@ void ProcessQueuesState::processShortList_4( Stack* stack )
     }
 
     ctx->removeMsg();
+    if ( m_intStack.empty() ) {
+        dbg().debug(CALL_INFO,2,DBG_MSK_PQS_Q,"set done\n");
+        ctx->setDone();
+    }
     processShortList_5( stack );
 }
 
@@ -672,10 +744,6 @@ void ProcessQueuesState::processShortList_5( Stack* stack )
     if ( ctx->isDone() ) {
         dbg().debug(CALL_INFO,2,DBG_MSK_PQS_Q,"return up the stack\n");
 
-		if ( ! ctx->msgQempty() ) {
-			m_recvdMsgQ.insert( m_recvdMsgQ.begin(), ctx->getMsgQ().begin(),
-														ctx->getMsgQ().end() );
-		}
         delete stack->back();
         stack->pop_back();
         schedCallback( stack->back()->getCallback() );
@@ -728,7 +796,8 @@ void ProcessQueuesState::dmaRecvFiniSRB( ShortRecvBuffer* buf, nid_t nid,
                             buf->hdr.count, buf->hdr.dtypeSize );
 
     assert( tag == (uint32_t) ShortMsgQ );
-    m_recvdMsgQ.push_back( buf );
+    m_recvdMsgQ[m_recvdMsgQpos].push_back( buf );
+    dbg().debug(CALL_INFO,2,DBG_MSK_PQS_CB,"recvdMsgQ=%s\n",recvdMsgQsize());
     m_statRcvdMsg->addData( m_recvdMsgQ.size() );
 
     runInterruptCtx();
@@ -740,42 +809,54 @@ void ProcessQueuesState::dmaRecvFiniSRB( ShortRecvBuffer* buf, nid_t nid,
 void ProcessQueuesState::enableInt( FuncCtxBase* ctx,
 	void (ProcessQueuesState::*funcPtr)( Stack* ) )
 {
-  	dbg().debug(CALL_INFO,1,DBG_MSK_PQS_INT,"ctx=%p\n",ctx);
-	assert( m_funcStack.empty() );
+    dbg().debug(CALL_INFO,1,DBG_MSK_PQS_INT,"ctx=%p missedInt=%d\n",ctx,m_missedInt);
+    assert( m_funcStack.empty() );
     if ( m_intCtx ) {
   	    dbg().debug(CALL_INFO,1,DBG_MSK_PQS_INT,"already have a return ctx\n");
         return;
     }
 
-	m_funcStack.push_back(ctx);
+    m_funcStack.push_back(ctx);
 
-	ctx->setCallback( bind( funcPtr, this, &m_funcStack ) );
+    ctx->setCallback( bind( funcPtr, this, &m_funcStack ) );
 
-	m_intCtx = ctx;
+    m_intCtx = ctx;
 
-	if ( m_missedInt ) runInterruptCtx();
+    if ( m_missedInt )  {
+        runInterruptCtx();
+    } else {
+        dbg().debug(CALL_INFO,1,DBG_MSK_PQS_INT,"nothing to do\n");
+    }
 }
 
 void ProcessQueuesState::runInterruptCtx( )
 {
+    dbg().debug(CALL_INFO,1,DBG_MSK_PQS_INT," %p %zu\n",m_intCtx, m_intStack.size());
+
 	if ( ! m_intCtx || ! m_intStack.empty() ) {
     	dbg().debug(CALL_INFO,1,DBG_MSK_PQS_INT,"missed interrupt\n");
         m_missedInt = true;
 		return;
 	}
 
+	// we are now in interrupt context 
+
     InterruptCtx* ctx = new InterruptCtx(
             std::bind( &ProcessQueuesState::leaveInterruptCtx, this, &m_intStack )
     );
 
     m_intStack.push_back( ctx );
+    dbg().debug(CALL_INFO,1,DBG_MSK_PQS_INT,"m_intStack.size()=%zu\n",m_intStack.size());
 
+	// clear the missed interrupt flag 
+	m_missedInt = false;
     dbg().debug(CALL_INFO,1,DBG_MSK_PQS_INT,"call processQueues\n" );
 	processQueues( &m_intStack );
 }
 
 void ProcessQueuesState::leaveInterruptCtx( Stack* stack )
 {
+    dbg().debug(CALL_INFO,2,DBG_MSK_PQS_CB,"recvdMsgQ=%s\n",recvdMsgQsize());
     assert( 1 == stack->size() );
 	delete stack->back();
 	stack->pop_back();
@@ -786,12 +867,17 @@ void ProcessQueuesState::leaveInterruptCtx( Stack* stack )
 
 	m_intCtx = NULL;
 
+    dbg().debug(CALL_INFO,1,DBG_MSK_PQS_INT,"before \n" );
+	// this should send us back to user context
     callback();
+    dbg().debug(CALL_INFO,1,DBG_MSK_PQS_INT,"after \n" );
 
+#if 0 // do we need this?
     if ( m_intCtx && m_missedInt ) {
         runInterruptCtx();
         m_missedInt = false;
     }
+#endif
 }
 
 void ProcessQueuesState::pioSendFiniVoid( std::vector<void*> ptrs, uint64_t simVAddr )
@@ -893,19 +979,19 @@ void ProcessQueuesState::loopHandler( int srcCore, std::vector<IoVec>& vec, void
                                                     srcCore, key, vec.size(), hdr->rank);
 
     ++m_numRecvLooped;
-    m_recvdMsgQ.push_back( new LoopReq( srcCore, vec, key ) );
+    m_recvdMsgQ[m_recvdMsgQpos].push_back( new LoopReq( srcCore, vec, key ) );
     m_statRcvdMsg->addData( m_recvdMsgQ.size() );
 
     runInterruptCtx();
 }
 
-_CommReq* ProcessQueuesState::searchPostedRecv( MatchHdr& hdr, int& count )
+_CommReq* ProcessQueuesState::searchPostedRecv( std::deque< _CommReq* >& pstd, MatchHdr& hdr, int& count )
 {
     _CommReq* req = NULL;
-    dbg().debug(CALL_INFO,2,DBG_MSK_PQS_Q,"posted size %lu\n",m_pstdRcvQ.size());
+    dbg().debug(CALL_INFO,2,DBG_MSK_PQS_Q,"posted size %lu\n",pstd.size());
 
-    std::deque< _CommReq* >:: iterator iter = m_pstdRcvQ.begin();
-    for ( ; iter != m_pstdRcvQ.end(); ++iter ) {
+    std::deque< _CommReq* >:: iterator iter = pstd.begin();
+    for ( ; iter != pstd.end(); ++iter ) {
 
         ++count;
         if ( ! checkMatchHdr( hdr, (*iter)->hdr(), (*iter)->ignore() ) ) {
@@ -913,7 +999,7 @@ _CommReq* ProcessQueuesState::searchPostedRecv( MatchHdr& hdr, int& count )
         }
 
         req = *iter;
-        m_pstdRcvQ.erase(iter);
+        pstd.erase(iter);
         break;
     }
     dbg().debug(CALL_INFO,2,DBG_MSK_PQS_Q,"req=%p\n",req);

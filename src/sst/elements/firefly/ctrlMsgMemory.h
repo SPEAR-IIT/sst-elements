@@ -1,8 +1,8 @@
-// Copyright 2013-2020 NTESS. Under the terms
+// Copyright 2013-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2013-2020, NTESS
+// Copyright (c) 2013-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -49,6 +49,18 @@ class Memory : public MemoryBase {
         "",
         SST::Firefly::CtrlMsg::Memory
     )
+	SST_ELI_DOCUMENT_PARAMS(
+		{"matchDelay_ns","","1"},
+		{"txMemcpyMod","Sets the TX memory copy module",""},
+		{"rxMemcpyMod","Sets the RX memory copy module",""},
+		{"regRegionBaseDelay_ns","Sets the default delay for a memory region pin","0"},
+		{"regRegionPerPageDelay_ns","Sets the per page delay for memory region pin","0"},
+		{"regRegionXoverLength","Sets the page size fo memory pin","4096"},
+	)
+	/* PARAMS
+		txMemcpyModParams.*
+		rxMemcpyModParams.*
+	*/
 
     Memory( ComponentId_t id, Params& params );
     ~Memory();
@@ -158,12 +170,12 @@ inline Memory::Memory( ComponentId_t id, Params& params ) : MemoryBase(id)
     m_matchDelay_ns = params.find<int>( "matchDelay_ns", 1 );
 
     std::string tmpName = params.find<std::string>("txMemcpyMod");
-    Params tmpParams = params.find_prefix_params("txMemcpyModParams.");
+    Params tmpParams = params.get_scoped_params("txMemcpyModParams");
     m_txMemcpyMod = dynamic_cast<LatencyMod*>( loadModule( tmpName, tmpParams ) );
     assert( m_txMemcpyMod );
 
     tmpName = params.find<std::string>("rxMemcpyMod");
-    tmpParams = params.find_prefix_params("rxMemcpyModParams.");
+    tmpParams = params.get_scoped_params("rxMemcpyModParams");
     m_rxMemcpyMod = dynamic_cast<LatencyMod*>( loadModule( tmpName, tmpParams ) );
     assert( m_rxMemcpyMod );
 

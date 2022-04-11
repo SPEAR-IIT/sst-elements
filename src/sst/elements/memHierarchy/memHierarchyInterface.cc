@@ -1,9 +1,9 @@
 // -*- mode: c++ -*-
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -72,6 +72,7 @@ void MemHierarchyInterface::init(unsigned int phase) {
                 if (memEvent->getInitCmd() == MemEventInit::InitCommand::Coherence) {
                     MemEventInitCoherence * memEventC = static_cast<MemEventInitCoherence*>(memEvent);
                     baseAddrMask_ = ~(memEventC->getLineSize() - 1);
+                    lineSize_ = memEventC->getLineSize();
                     initDone_ = true;
                 }
             }

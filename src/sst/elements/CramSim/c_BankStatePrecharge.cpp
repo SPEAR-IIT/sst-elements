@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -48,14 +48,14 @@ using namespace SST::CramSim;
 c_BankStatePrecharge::c_BankStatePrecharge(
 		std::map<std::string, unsigned>* x_bankParams) :
 		m_receivedCommandPtr(nullptr) {
-	// std::cout << std::endl << __PRETTY_FUNCTION__ << std::endl;
+	//Simulation::getSimulation()->getSimulationOutput().output("\n%s\n", __PRETTY_FUNCTION__);
 
 	m_bankParams = x_bankParams;
 	m_currentState = e_BankState::PRE;
 }
 
 c_BankStatePrecharge::~c_BankStatePrecharge() {
-	// std::cout << std::endl << __PRETTY_FUNCTION__ << std::endl;
+	//Simulation::getSimulation()->getSimulationOutput().output("\n%s\n", __PRETTY_FUNCTION__);
 
 }
 
@@ -82,7 +82,7 @@ void c_BankStatePrecharge::clockTic(c_BankInfo* x_bank, SimTime_t x_cycle) {
 void c_BankStatePrecharge::enter(c_BankInfo* x_bank, c_BankState* x_prevState,
 		c_BankCommand* x_cmdPtr,SimTime_t x_cycle) {
 
-//	std::cout << "Entered " << __PRETTY_FUNCTION__ << std::endl;
+//      Simulation::getSimulation()->getSimulationOutput().output("Entered %s\n", __PRETTY_FUNCTION__);
 	x_bank->resetRowOpen();
 	m_prevCommandPtr = x_cmdPtr;
 	m_receivedCommandPtr = nullptr;

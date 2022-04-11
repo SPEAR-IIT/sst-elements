@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // This file is part of the SST software package. For license
@@ -32,12 +32,12 @@ public:
     )
 
     SST_ELI_DOCUMENT_PARAMS(
-        {   "arg.iterations",       "Sets the number of unstructured motif operations to perform",  "1"},
-        {   "arg.computetime",      "Sets the number of nanoseconds to compute for",    "0"},
         {   "arg.graphfile",        "Name of the file the includes the communication graph",        "-1"},
         {   "arg.p_size",           "Sets the problem size",            "10000"},
         {   "arg.fields_per_cell",  "Specify how many variables are being computed per cell (this is one of the dimensions in message size. Default is 1", "1"},
         {   "arg.datatype_width",   "Specify the size of a single variable, single grid point, typically 8 for double, 4 for float, default is 8 (double). This scales message size to ensure byte count is correct.", "8"},
+        {   "arg.iterations",       "Sets the number of unstructured motif operations to perform",  "1"},
+        {   "arg.computetime",      "Sets the number of nanoseconds to compute for",    "0"},
     )
 
     SST_ELI_DOCUMENT_STATISTICS(

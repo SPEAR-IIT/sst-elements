@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -43,6 +43,12 @@ public:
     )
 
     SST_ELI_DOCUMENT_PARAMS(
+		{"arg.blocking","Sets if FAM ops are blocking","false"},\
+		{"arg.blockSize","Sets size of each block of data transfer","4096"},\
+		{"arg.numBlocks","Sets the number of blocks","0"},\
+		{"arg.firstBlock","Sets the first block","0"},\
+		{"arg.blockStride","Sets the stride between block","0"},\
+		{"arg.backed","Sets if FAM memory is backed","false"},\
     )
 
 public:

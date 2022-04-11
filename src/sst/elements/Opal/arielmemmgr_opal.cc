@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -49,7 +49,7 @@ MemoryManagerOpal::MemoryManagerOpal(ComponentId_t id, Params& params) :
             params.insert("memmgr.memorylevels", "1", true);
         }
         output->verbose(CALL_INFO, 1, 0, "Loading memory manager: %s\n", translatorstr.c_str());
-        Params translatorParams = params.find_prefix_params("memmgr.");
+        Params translatorParams = params.get_scoped_params("memmgr");
         temp_translator = loadAnonymousSubComponent<ArielMemoryManager>(translatorstr, "translator", 0, ComponentInfo::SHARE_STATS | ComponentInfo::INSERT_STATS, translatorParams);
         if (NULL == temp_translator)
             output->fatal(CALL_INFO, -1, "Failed to load memory manager: %s\n", translatorstr.c_str());

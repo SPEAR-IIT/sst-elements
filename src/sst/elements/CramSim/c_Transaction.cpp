@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -113,12 +113,14 @@ void c_Transaction::isProcessed(bool x_processed) {
 //
 // FIXME: print function should be actually be overloaded in operator<< but for some reason operator overloading does not working when creating the library, so for now we will have the print function.
 void c_Transaction::print() const {
-  std::cout << this << " " << getTransactionString() << ", seqNum: " << std::dec << m_seqNum
+    std::stringstream str;
+    str << this << " " << getTransactionString() << ", seqNum: " << std::dec << m_seqNum
 	    << ", address: 0x" << std::hex << getAddress() << std::dec
 	    << ", dataWidth = " << m_dataWidth << ", m_numWaitingCommands = "
 	    << std::dec << m_numWaitingCommands << ", isProcessed = "
 	    << std::boolalpha << m_processed << ", isResponseReady = "
 	    << std::boolalpha << m_isResponseReady <<std::endl;
+    Simulation::getSimulation()->getSimulationOutput().output("%s", str.str().c_str());
 }
 
 

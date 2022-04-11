@@ -1,8 +1,8 @@
-// Copyright 2013-2020 NTESS. Under the terms
+// Copyright 2013-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2013-2020, NTESS
+// Copyright (c) 2013-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -49,17 +49,17 @@ Hades::Hades( ComponentId_t id, Params& params ) :
         params.find<uint32_t>("verboseMask",0),
         Output::STDOUT );
 
-    Params tmpParams = params.find_prefix_params("ctrlMsg.");
+    Params tmpParams = params.get_scoped_params("ctrlMsg");
 
     m_proto = loadUserSubComponent<CtrlMsg::API>( "proto" );
 
-    Params funcParams = params.find_prefix_params("functionSM.");
+    Params funcParams = params.get_scoped_params("functionSM");
 
     m_numNodes = params.find<int>("numNodes",0);
 
     m_functionSM = loadAnonymousSubComponent<FunctionSM>( "firefly.functionSM","", 0, ComponentInfo::SHARE_NONE, funcParams, m_proto );
 
-    tmpParams = params.find_prefix_params("nicParams." );
+    tmpParams = params.get_scoped_params("nicParams" );
 
     std::string moduleName = params.find<std::string>("nicModule");
 
@@ -71,7 +71,7 @@ Hades::Hades( ComponentId_t id, Params& params ) :
 
     moduleName = params.find<std::string>("nodePerf", "firefly.SimpleNodePerf");
 
-    tmpParams = params.find_prefix_params("nodePerf." );
+    tmpParams = params.get_scoped_params("nodePerf" );
     m_nodePerf = dynamic_cast<NodePerf*>(loadModule(
                                         moduleName, tmpParams ) );
     if ( !m_nodePerf ) {
@@ -79,14 +79,14 @@ Hades::Hades( ComponentId_t id, Params& params ) :
                                         moduleName.c_str());
     }
 
-    Params dtldParams = params.find_prefix_params( "detailedCompute." );
+    Params dtldParams = params.get_scoped_params( "detailedCompute" );
     std::string dtldName =  dtldParams.find<std::string>( "name" );
 
     if ( ! dtldName.empty() ) {
         m_detailedCompute = loadUserSubComponent<Thornhill::DetailedCompute>("detailedCompute", ComponentInfo::SHARE_NONE);
     }
 
-    std::string memName = params.find_prefix_params( "memoryHeapLink." ).find<std::string>( "name" );
+    std::string memName = params.get_scoped_params( "memoryHeapLink" ).find<std::string>( "name" );
 
     if ( ! memName.empty() ) {
         m_memHeapLink = loadUserSubComponent<Thornhill::MemoryHeapLink>( "memoryHeap", ComponentInfo::SHARE_NONE );
@@ -114,14 +114,14 @@ Hades::Hades( ComponentId_t id, Params& params ) :
         m_netMapName = params.find<std::string>( "netMapName" );
         assert( ! m_netMapName.empty() );
 
-        m_sreg = getGlobalSharedRegion( m_netMapName,
-                    m_netMapSize*sizeof(int), new SharedRegionMerger());
+        // m_sreg = getGlobalSharedRegion( m_netMapName,
+        //             m_netMapSize*sizeof(int), new SharedRegionMerger());
 
+        m_sreg.initialize(m_netMapName, m_netMapSize);
         if ( 0 == params.find<int>("coreId",0) ) {
-            m_sreg->modifyArray( netMapId, netId );
+            m_sreg.write( netMapId, netId );
         }
-
-        m_sreg->publish();
+        m_sreg.publish();
 	}
 }
 
@@ -143,7 +143,7 @@ void Hades::_componentSetup()
 
     	Group* group = m_info.getGroup(
         	m_info.newGroup( MP::GroupWorld, Info::NetMap ) );
-    	group->initMapping( m_sreg->getPtr<const int*>(),
+    	group->initMapping( &(*m_sreg.begin()),
 					m_netMapSize, m_virtNic->getNumCores() );
 
     	int nid = m_virtNic->getNodeId();

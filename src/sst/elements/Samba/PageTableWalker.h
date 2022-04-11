@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // This file is part of the SST software package. For license
@@ -71,7 +71,7 @@ namespace SST { namespace SambaComponent{
 
 		int * shootdown; // This is used to indicate TLB hierarchy that TLB shootdown from other cores is in progress
 
-		int shootdownId;
+//		int shootdownId;
 
 		int num_pages_migrated;
 
@@ -80,7 +80,7 @@ namespace SST { namespace SambaComponent{
 
 		std::vector<std::pair<Address_t, int> > * invalid_addrs; // This is used to store address invalidation requests.
 
-		uint64_t tlb_shootdown_time;
+//		uint64_t tlb_shootdown_time;
 
 
 		// ------------- Note that we assume that for each Samba componenet instance, all units run the same VMA, thus all share the same page table
@@ -113,7 +113,7 @@ namespace SST { namespace SambaComponent{
 		std::map<Address_t,int> *PENDING_PAGE_FAULTS_PUD;
 		std::map<Address_t,int> *PENDING_PAGE_FAULTS_PMD;
 		std::map<Address_t,int> *PENDING_PAGE_FAULTS_PTE;
-		std::map<Address_t,int> *PENDING_SHOOTDOWN_EVENTS;
+//		std::map<Address_t,int> *PENDING_SHOOTDOWN_EVENTS;
 
 
 

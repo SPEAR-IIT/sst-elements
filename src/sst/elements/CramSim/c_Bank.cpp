@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -75,8 +75,8 @@ c_Bank::~c_Bank() {
 void c_Bank::handleCommand(c_BankCommand* x_bankCommandPtr) {
 
   if(m_cmd) {
-   // std::cout << "m_cmd = ";       m_cmd->print();
-   // std::cout << "x_cmd = ";       x_bankCommandPtr->print();
+   // Simulation::getSimulation->getSimulationOutput().output("m_cmd = ");       m_cmd->print();
+   // Simulation::getSimulation->getSimulationOutput().output("x_cmd = ");       x_bankCommandPtr->print();
   }
 
 	assert(nullptr == m_cmd);
@@ -126,8 +126,9 @@ void c_Bank::handleCommand(c_BankCommand* x_bankCommandPtr) {
 			case e_BankCommandType::REF:
 				break;
 			default:
-				std::cout << "ERR @ " << __PRETTY_FUNCTION__ << std::endl;
-				exit(-1);
+                                std::stringstream str;
+                                str << "ERR @ " << __PRETTY_FUNCTION__ << std::endl;
+                                Simulation::getSimulation()->getSimulationOutput().fatal(CALL_INFO, -1, "%s", str.str().c_str());
 		}
 	}
 }
@@ -168,8 +169,8 @@ c_BankCommand* c_Bank::clockTic() {
 					m_cmd = nullptr;
 					return m_cmd;
 				default:
-					std::cout << "Invalid command type... exiting" << std::endl;
-					exit(-1);
+                                        Simulation::getSimulation()->getSimulationOutput().fatal(
+                                                CALL_INFO, -1, "Invalid command type... exiting\n");
 			}
 
 			// If allocation knob allows sending the response down the pipe,

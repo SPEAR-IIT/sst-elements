@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -109,7 +109,7 @@ ArielCore::ArielCore(ComponentId_t id, ArielTunnel *tunnel,
 
     // If we enabled tracing then open up the correct file.
     if(enableTracing) {
-        Params interfaceParams = params.find_prefix_params("tracer.");
+        Params interfaceParams = params.get_scoped_params("tracer");
         traceGen = dynamic_cast<ArielTraceGenerator*>( loadModule(traceGenName, interfaceParams) );
 
         if(NULL == traceGen) {
@@ -199,7 +199,7 @@ void ArielCore::commitWriteEvent(const uint64_t address,
 
                 delete[] buffer;
 
-                output->verbose(CALL_INFO, 16, 0, "Write-Payload: Len=%" PRIu32 ", Data={ %s } %p\n",
+                output->verbose(CALL_INFO, 16, 0, "Write-Payload: Len=%" PRIu32 ", Data={ %s } %" PRIx64 "\n",
                         length, payloadString.c_str(), virtAddress);
             }
             req->setPayload( (uint8_t*) payload, length );

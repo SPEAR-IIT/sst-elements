@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -124,6 +124,11 @@ public:
     int m_num_pes;
 };
 
+#define ELI_params \
+	{"arg.nelems","Sets the number of data elements","1"},\
+	{"arg.printResults","Sets if the results are printed","false"},\
+	{"arg.blocking","Sets if memory is backed","true"},\
+
 class EmberShmemGetIntGenerator : public EmberShmemGetGenerator<int> {
 public:
     SST_ELI_REGISTER_SUBCOMPONENT_DERIVED(
@@ -135,7 +140,9 @@ public:
         SST::Ember::EmberGenerator
     )
 
-    SST_ELI_DOCUMENT_PARAMS()
+    SST_ELI_DOCUMENT_PARAMS(
+		ELI_params
+	)
 
 public:
     EmberShmemGetIntGenerator( SST::ComponentId_t id, Params& params ) :
@@ -153,7 +160,9 @@ public:
         SST::Ember::EmberGenerator
     )
 
-    SST_ELI_DOCUMENT_PARAMS()
+    SST_ELI_DOCUMENT_PARAMS(
+		ELI_params
+	)
 
 public:
     EmberShmemGetLongGenerator( SST::ComponentId_t id, Params& params ) :
@@ -171,7 +180,9 @@ public:
         SST::Ember::EmberGenerator
     )
 
-    SST_ELI_DOCUMENT_PARAMS()
+    SST_ELI_DOCUMENT_PARAMS(
+		ELI_params
+	)
 
 public:
     EmberShmemGetDoubleGenerator( SST::ComponentId_t id, Params& params ) :
@@ -189,12 +200,16 @@ public:
         SST::Ember::EmberGenerator
     )
 
-    SST_ELI_DOCUMENT_PARAMS()
+    SST_ELI_DOCUMENT_PARAMS(
+		ELI_params
+	)
 
 public:
     EmberShmemGetFloatGenerator( SST::ComponentId_t id, Params& params ) :
         EmberShmemGetGenerator(id,  params) { }
 };
+
+#undef ELI_params
 }
 }
 

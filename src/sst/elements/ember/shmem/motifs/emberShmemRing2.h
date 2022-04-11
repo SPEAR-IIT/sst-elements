@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -119,7 +119,10 @@ public:
         SST::Ember::EmberGenerator
     )
 
-    SST_ELI_DOCUMENT_PARAMS()
+    SST_ELI_DOCUMENT_PARAMS(
+		{"arg.iterations","Sets the number of iterations","1"},
+        {"arg.putv","Sets what operation to use true=putv false =put","true"},
+	)
 
 public:
     EmberShmemRing2IntGenerator( SST::ComponentId_t id, Params& params ) :

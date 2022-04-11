@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -34,6 +34,10 @@ class SingleThread : public DetailedCompute {
         "",
        	SST::Thornhill::SingleThread
     )
+	SST_ELI_DOCUMENT_PARAMS( 
+		{"portName","Sets the portname of the detailed compute model","detailed0"}
+	)
+
 	struct Entry {
       Entry( std::function<int()>& _finiHandler ) : finiHandler( _finiHandler ) {}
     	std::function<int()> finiHandler;

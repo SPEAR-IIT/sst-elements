@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -23,6 +23,7 @@
 #include <sst/core/link.h>
 #include <sst/core/output.h>
 #include <sst/core/timeConverter.h>
+#include <sst/core/shared/sharedArray.h>
 
 #include <sst/core/statapi/stataccumulator.h>
 
@@ -125,7 +126,7 @@ private:
     int local_ports;
     bool use_dense_map;
     bool port_priority_equal;
-    const int* dense_map;
+    Shared::SharedArray<int> dense_map;
 
     std::vector< lru_unit<int> > lru_units;
     // lru_unit<int> local_lru;

@@ -1,8 +1,8 @@
-// Copyright 2013-2020 NTESS. Under the terms
+// Copyright 2013-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2013-2020, NTESS
+// Copyright (c) 2013-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -38,11 +38,7 @@ using namespace SST::Interfaces;
 /* Constructor */
 
 MemNIC::MemNIC(ComponentId_t id, Params &params) : MemNICBase(id, params) {
-    build(params);
-}
-
-void MemNIC::build(Params& params) {
-
+    
     link_control = loadUserSubComponent<SimpleNetwork>("linkcontrol", ComponentInfo::SHARE_NONE, 1); // 1 is the num virtual networks
     if (!link_control) {
         Params netparams;

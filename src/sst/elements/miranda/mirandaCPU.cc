@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -59,7 +59,7 @@ RequestGenCPU::RequestGenCPU(SST::ComponentId_t id, SST::Params& params) :
 	    std::string interfaceName = params.find<std::string>("memoryinterface", "memHierarchy.memInterface");
 	    out->verbose(CALL_INFO, 1, 0, "Memory interface to be loaded is: %s\n", interfaceName.c_str());
 
-	    Params interfaceParams = params.find_prefix_params("memoryinterfaceparams.");
+	    Params interfaceParams = params.get_scoped_params("memoryinterfaceparams");
             interfaceParams.insert("port", "cache_link");
 	    cache_link = loadAnonymousSubComponent<Interfaces::SimpleMem>(interfaceName, "memory", 0, ComponentInfo::SHARE_PORTS | ComponentInfo::INSERT_STATS,
                     interfaceParams, timeConverter, new SimpleMem::Handler<RequestGenCPU>(this, &RequestGenCPU::handleEvent));
@@ -94,13 +94,7 @@ RequestGenCPU::RequestGenCPU(SST::ComponentId_t id, SST::Params& params) :
 		out->fatal(CALL_INFO, -8, "Error: unknown page mapping type: \'%s\'\n", policyStr.c_str());
 	}
 
-        // Use shared region instead of replicating mapping on each core
-        addrMap = Simulation::getSharedRegionManager()->getGlobalSharedRegion("miranda", pageCount * sizeof(uint64_t), new SharedRegionMerger());
-
-	memMgr = new MirandaMemoryManager(out, pageSize, pageCount, policy, addrMap);
-        addrMap->publish();
-
-        memMgr->setSharedAddressMap(addrMap->getPtr<const uint64_t*>());
+        memMgr = new MirandaMemoryManager(out, pageSize, pageCount, policy);
 
         reqGen = loadUserSubComponent<RequestGenerator>("generator");
         if (reqGen) {
@@ -114,7 +108,7 @@ RequestGenCPU::RequestGenCPU(SST::ComponentId_t id, SST::Params& params) :
             if ( ! reqGenModName.empty() ) {
 
 		out->verbose(CALL_INFO, 1, 0, "Request generator to be loaded is: %s\n", reqGenModName.c_str());
-		Params genParams = params.find_prefix_params("generatorParams.");
+		Params genParams = params.get_scoped_params("generatorParams");
 		reqGen = loadAnonymousSubComponent<RequestGenerator>( reqGenModName, "generator", 0, ComponentInfo::INSERT_STATS, genParams);
 		if(NULL == reqGen) {
 			out->fatal(CALL_INFO, -1, "Failed to load generator: %s\n", reqGenModName.c_str());

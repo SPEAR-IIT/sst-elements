@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -127,7 +127,6 @@ MemCacheController::MemCacheController(ComponentId_t id, Params &params) : Compo
 
     clockLink_ = link_->isClocked();
     link_->setRecvHandler( new Event::Handler<MemCacheController>(this, &MemCacheController::handleEvent));
-    link_->setName(getName());
 
     link_->setRegion(region_);
 

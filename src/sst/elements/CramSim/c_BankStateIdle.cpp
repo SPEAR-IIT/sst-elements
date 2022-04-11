@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -47,13 +47,13 @@ using namespace SST::CramSim;
 
 c_BankStateIdle::c_BankStateIdle(std::map<std::string, unsigned>* x_bankParams) :
 		m_receivedCommandPtr(nullptr), m_timer(0) {
-	//std::cout << "Entered " << __PRETTY_FUNCTION__ << std::endl;
+	//Simulation::getSimulation()->getSimulationOutput().output("Entered %s\n", __PRETTY_FUNCTION__);
 	m_bankParams = x_bankParams;
 	m_currentState = e_BankState::IDLE;
 }
 
 c_BankStateIdle::~c_BankStateIdle() {
-	// std::cout << std::endl << __PRETTY_FUNCTION__ << std::endl;
+	//Simulation::getSimulation()->getSimulationOutput().output("\n%s\n", __PRETTY_FUNCTION__);
 
 }
 

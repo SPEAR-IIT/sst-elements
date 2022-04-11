@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 #
-# Copyright 2009-2020 NTESS. Under the terms
+# Copyright 2009-2021 NTESS. Under the terms
 # of Contract DE-NA0003525 with NTESS, the U.S.
 # Government retains certain rights in this software.
 #
-# Copyright (c) 2009-2020, NTESS
+# Copyright (c) 2009-2021, NTESS
 # All rights reserved.
 #
 # Portions are copyright of other developers:
@@ -23,15 +23,10 @@ class topoDragonFly(Topology):
 
     def __init__(self):
         Topology.__init__(self)
-        self._declareClassVariables([
-            "link_lat_host", "link_lat_local", "link_lat_global",
-            "global_link_map"])
+        self._declareClassVariables(["link_latency","host_link_latency","global_link_map"])
         self._declareParams("main",["hosts_per_router","routers_per_group","intergroup_links","num_groups",
-                                    "algorithm","adaptive_threshold","global_routes",
-                                    "link_lat_local", "link_lat_global",
-                                    "learning_rate", "learning_rate2", "save_qtable", "load_qtable", "pathToQtableFile", "max_hops", "epsilon", "qtable_bcast", "qbcastThsld", "qbcastPerid", "qtable_row_type", "src_group_q", "src_mid_group_q", "save_qtable_time", "q_threshold1", "q_threshold2", 
-                                    "perid_func"])
-        
+                                    "algorithm","adaptive_threshold","global_routes","config_failed_links",
+                                    "failed_links"])
         self.global_routes = "absolute"
         self._subscribeToPlatformParamSet("topology")
 
@@ -59,18 +54,21 @@ class topoDragonFly(Topology):
 
     def getRouterNameForId(self,rtr_id):
         return self.getRouterNameForLocation(rtr_id // self.routers_per_group, rtr_id % self.routers_per_group)
-        
+
     def getRouterNameForLocation(self,group,rtr):
         return "%srtr.G%dR%d"%(self._prefix,group,rtr)
-    
+
     def findRouterByLocation(self,group,rtr):
         return sst.findComponentByName(self.getRouterNameForLocation(group,rtr))
-    
-        
+
+
     def build(self, endpoint):
-        # host, local, global latency are explicitly defined
-        # if self.host_link_latency is None:
-        #     self.host_link_latency = self.link_latency
+        if self._check_first_build():
+            sst.addGlobalParams("params_%s"%self._instance_name, self._getGroupParams("main"))
+
+
+        if self.host_link_latency is None:
+            self.host_link_latency = self.link_latency
 
         num_peers = self.hosts_per_router * self.routers_per_group * self.num_groups
 
@@ -127,7 +125,6 @@ class topoDragonFly(Topology):
             # Look into global link map to get the dest group and link
             # number to that group
             raw_dest = self.global_link_map[r * igpr + p];
-
             if raw_dest == -1:
                 return None
 
@@ -151,7 +148,6 @@ class topoDragonFly(Topology):
             dest = max(dest_grp, g)
 
             #getLink("link:g%dg%dr%d"%(g, src, dst)), "port%d"%port, self.params["link_lat"])
-
             return getLink("%sglobal_link:g%dg%dr%d"%(self._prefix,src,dest,link_num))
 
         #########################
@@ -161,7 +157,6 @@ class topoDragonFly(Topology):
         nic_num = 0
         # GROUPS
         for g in range(self.num_groups):
-
             # GROUP ROUTERS
             for r in range(self.routers_per_group):
                 rtr = self._instanceRouter(num_ports,router_num)
@@ -169,7 +164,7 @@ class topoDragonFly(Topology):
                 # Insert the topology object
                 sub = rtr.setSubComponent(self.router.getTopologySlotName(),"merlin.dragonfly",0)
                 self._applyStatisticsSettings(sub)
-                sub.addParams(self._getGroupParams("main"))
+                sub.addGlobalParamSet("params_%s"%self._instance_name)
                 sub.addParam("intergroup_per_router",intergroup_per_router)
                 if router_num == 0:
                     # Need to send in the global_port_map
@@ -184,7 +179,8 @@ class topoDragonFly(Topology):
                     if nic:
                         link = sst.Link("link:g%dr%dh%d"%(g, r, p))
                         #network_interface.build(nic,slot,0,link,self.host_link_latency)
-                        link.connect( (nic, port_name, self.link_lat_host), (rtr, "port%d"%port, self.link_lat_host) )
+                        link.connect( (nic, port_name, self.host_link_latency), (rtr, "port%d"%port, self.host_link_latency) )
+                        #link.setNoCut()
                         #rtr.addLink(link,"port%d"%port,self.host_link_latency)
                     nic_num = nic_num + 1
                     port = port + 1
@@ -193,15 +189,13 @@ class topoDragonFly(Topology):
                     if p != r:
                         src = min(p,r)
                         dst = max(p,r)
-                        rtr.addLink(getLink("link:g%dr%dr%d"%(g, src, dst)), "port%d"%port, self.link_lat_local)
-
+                        rtr.addLink(getLink("link:g%dr%dr%d"%(g, src, dst)), "port%d"%port, self.link_latency)
                         port = port + 1
 
                 for p in range(igpr):
                     link = getGlobalLink(g,r,p)
                     if link is not None:
-                        rtr.addLink(link,"port%d"%port, self.link_lat_global)
-
+                        rtr.addLink(link,"port%d"%port, self.link_latency)
                     port = port +1
 
                 router_num = router_num + 1

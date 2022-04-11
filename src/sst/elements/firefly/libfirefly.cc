@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -26,3 +26,35 @@
 #include <rangeLatMod.h>
 #include <scaleLatMod.h>
 #include <nodePerf.h>
+
+/*
+  Install the python library
+ */
+#include <sst/core/model/element_python.h>
+
+namespace SST {
+namespace Firefly {
+
+char pyfirefly[] = {
+#include "pyfirefly.inc"
+    0x00};
+
+class FireflyPyModule : public SSTElementPythonModule {
+public:
+    FireflyPyModule(std::string library) :
+        SSTElementPythonModule(library)
+    {
+        auto primary_module = createPrimaryModule(pyfirefly,"pyfirefly.py");
+    }
+
+    SST_ELI_REGISTER_PYTHON_MODULE(
+        SST::Firefly::FireflyPyModule,
+        "firefly",
+        SST_ELI_ELEMENT_VERSION(1,0,0)
+    )
+
+    SST_ELI_EXPORT(SST::Firefly::FireflyPyModule)
+
+};
+}
+}

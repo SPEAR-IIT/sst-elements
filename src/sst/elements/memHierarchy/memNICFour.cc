@@ -1,8 +1,8 @@
-// Copyright 2013-2020 NTESS. Under the terms
+// Copyright 2013-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2013-2020, NTESS
+// Copyright (c) 2013-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -36,10 +36,6 @@ using namespace SST::Interfaces;
 /* Constructor */
 
 MemNICFour::MemNICFour(ComponentId_t id, Params &params) : MemNICBase(id, params) {
-    build(params);
-}
-
-void MemNICFour::build(Params& params) {
     bool found;
     std::array<std::string,4> pref = {"req", "ack", "fwd", "data"};
 
@@ -248,10 +244,11 @@ MemNICFour::OrderedMemRtrEvent* MemNICFour::processRecv(SimpleNetwork::Request *
 
         if (mre->hasClientData()) {
             OrderedMemRtrEvent * smre = static_cast<OrderedMemRtrEvent*>(mre);
-            if (smre->event != nullptr) {
+            /*if (smre->event != nullptr) {
+             * This should not be needed, we shouldn't be using the link IDs for anything in elements
                 MemEventBase * ev = static_cast<MemEventBase*>(smre->event);
                 ev->setDeliveryLink(smre->getLinkId(), NULL);
-            }
+            }*/
             return smre;
         } else {
             InitMemRtrEvent *imre = static_cast<InitMemRtrEvent*>(mre);

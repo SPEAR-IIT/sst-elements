@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -99,11 +99,11 @@ void EmberMotifLog::logMotifEnd(const std::string& name, const int motifNum) {
 		FILE* logFile = logRecord->getFile();
 
 		const char* nameChar = name.c_str();
-		const char* endTimeChar = Simulation::getSimulation()->getElapsedSimTime().toStringBestSI().c_str();
+        std::string endTime = Simulation::getSimulation()->getElapsedSimTime().toStringBestSI();
         const char* startTimeChar = start_time.c_str();
 
         // File format:  job rank motifnum motif_name start_time end_time
-		fprintf(logFile, "%d %d %d %s %s %s\n", jobID, rank, motifNum, nameChar, startTimeChar, endTimeChar);
+		fprintf(logFile, "%d %d %d %s %s %s\n", jobID, rank, motifNum, nameChar, startTimeChar, endTime.c_str());
 		fflush(logFile);
 
 	}

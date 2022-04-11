@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -126,6 +126,10 @@ class EmberMpiLib : public EmberLib {
         "",
         "SST::Ember::EmberMpiLib"
     )
+
+    SST_ELI_DOCUMENT_PARAMS(
+		{ "spyplotmode", "Sets the spyplot generation mode, 0 = none, 1 = spy on sends", "0" },
+	)
 
     typedef std::queue<EmberEvent*> Queue;
 

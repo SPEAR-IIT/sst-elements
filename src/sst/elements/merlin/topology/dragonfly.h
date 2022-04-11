@@ -1,10 +1,10 @@
 // -*- mode: c++ -*-
 
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -19,6 +19,8 @@
 #ifndef COMPONENTS_MERLIN_TOPOLOGY_DRAGONFLY_H
 #define COMPONENTS_MERLIN_TOPOLOGY_DRAGONFLY_H
 
+#include <algorithm>
+
 #include <sst/core/event.h>
 #include <sst/core/link.h>
 #include <sst/core/params.h>
@@ -26,8 +28,7 @@
 
 #include "sst/elements/merlin/router.h"
 
-#include <fstream>
-#include <sys/stat.h>
+
 
 namespace SST {
 class SharedRegion;
@@ -36,7 +37,26 @@ namespace Merlin {
 
 class topo_dragonfly_event;
 
-struct RouterPortPair {
+
+/* Assumed connectivity of each router:
+ * ports [0, p-1]:      Hosts
+ * ports [p, p+a-2]:    Intra-group
+ * ports [p+a-1, k-1]:  Inter-group
+ */
+
+struct dgnflyParams {
+    uint32_t p;  /* # of hosts / router */
+    uint32_t a;  /* # of routers / group */
+    uint32_t k;  /* Router Radix */
+    uint32_t h;  /* # of ports / router to connect to other groups */
+    uint32_t g;  /* # of Groups */
+    uint32_t n;  /* # of links between groups in a pair */
+};
+
+enum global_route_mode_t { ABSOLUTE, RELATIVE };
+
+
+struct RouterPortPair : public SST::Core::Serialization::serializable {
     uint16_t router;
     uint16_t port;
 
@@ -45,26 +65,112 @@ struct RouterPortPair {
         port(port)
         {}
 
-    RouterPortPair() {}
+    RouterPortPair() :
+        router(0),
+        port(0)
+        {}
+
+    bool operator==(const RouterPortPair& rhs) {
+        if ( router != rhs.router || port != rhs.port ) return false;
+        return true;
+    }
+
+    bool operator!=(const RouterPortPair& rhs) {
+        if ( router == rhs.router && port == rhs.port ) return false;
+        return true;
+    }
+
+    void serialize_order(SST::Core::Serialization::serializer &ser)  override {
+        ser & router;
+        ser & port;
+    }
+
+private:
+    ImplementSerializable(SST::Merlin::RouterPortPair)
+
 };
+
+
+// Class to parse the failed link format.  Designed to be used with
+// Paras::find_array<FailedLink>().
+struct FailedLink {
+    uint16_t low_group;
+    uint16_t high_group;
+    uint16_t slice;
+
+    // Format for string is group1:group2:slice
+    FailedLink(const std::string& format) {
+        size_t start = 0;
+
+        size_t index = format.find_first_of(":");
+        uint16_t value1 = SST::Core::from_string<uint16_t>(format.substr(0,index));
+        start = index + 1;
+
+        index = format.find_first_of(":",start);
+        uint16_t value2 = SST::Core::from_string<uint16_t>(format.substr(start,index-start));
+        start = index + 1;
+
+        low_group = value1 < value2 ? value1 : value2;
+        high_group = value1 < value2 ? value2 : value1;
+
+        slice = SST::Core::from_string<uint16_t>(format.substr(start,std::string::npos));
+    }
+};
+
+
 
 class RouteToGroup {
 private:
-    const RouterPortPair* data;
-    SharedRegion* region;
-    size_t groups;
-    size_t routes;
-
+    Shared::SharedArray<RouterPortPair> data;
+    //const RouterPortPair* data;
+    Shared::SharedArray<bool> failed_links;
+    // const uint8_t* link_counts;
+    Shared::SharedArray<uint8_t> link_counts;
+    size_t groups;  // Number of groups
+    size_t routers; // Number of routers per groupt
+    size_t slices;  // number of links between each pair of groups
+    size_t links;   // number global links per router
+    int gid;        // group id
+    int global_start;  // start of global ports
+    global_route_mode_t mode;   // routing mode
+    bool consider_failed_links; // whether or not we are simulating failed links
 
 public:
     RouteToGroup() {}
 
-    void init(SharedRegion* sr, size_t g, size_t r);
+    // void init(SharedRegion* sr, size_t g, size_t r);
+    void init_write(const std::string& basename, int group_id, global_route_mode_t route_mode,
+                    const dgnflyParams& params, const std::vector<int64_t>& global_link_map,
+                    bool config_failed_links, const std::vector<FailedLink>& failed_links);
 
-    const RouterPortPair& getRouterPortPair(int group, int route_number);
+    void init(const std::string& basename, int group_id, global_route_mode_t route_mode,
+              const dgnflyParams& params, bool config_failed_links);
 
-    void setRouterPortPair(int group, int route_number, const RouterPortPair& pair);
+    const RouterPortPair& getRouterPortPair(int group, int route_number) const;
+    const RouterPortPair& getRouterPortPairForGroup(uint32_t src_group, uint32_t dest_group, uint32_t slice) const;
+
+    // const RouterPortPair& getRouterPortPair(int src_group, int dest_group, int route_number);
+    // void setRouterPortPair(int group, int route_number, const RouterPortPair& pair);
+
+    int getValiantGroup(int dest_group, RNG::SSTRandom* rng) const;
+
+    inline uint8_t getLinkCount(int src_group, int dest_group) const {
+        return link_counts[src_group * groups + dest_group];
+    }
+
+    inline bool isFailedPort(const RouterPortPair& rp ) const {
+        return isFailedPortForGroup(gid,rp);
+    }
+
+    inline bool isFailedPortForGroup(uint32_t src_group, const RouterPortPair& rp ) const {
+        if ( !consider_failed_links ) return false;
+        // If the SharedArray is ready yet, then we are still in
+        // construct phase and just return false for now.
+        if ( failed_links.size() == 0 ) return false;
+        return failed_links[(src_group * routers * links) + (rp.router * links) + rp.port - global_start];
+    }
 };
+
 
 
 class topo_dragonfly: public Topology {
@@ -99,158 +205,38 @@ public:
         {"adaptive_threshold",    "Threshold to use when make adaptive routing decisions.", "2.0"},
         {"global_link_map",       "Array specifying connectivity of global links in each dragonfly group."},
         {"global_route_mode",     "Mode for intepreting global link map [absolute (default) | relative].","absolute"},
-
-        {"dragonfly:link_lat_global",    "link latency", "100ns"},
-        {"link_lat_global",    "link latency", "100ns"},
-
-        {"dragonfly:link_lat_local",    "link latency", "100ns"},
-        {"link_lat_local",    "link latency", "100ns"},
-
-        {"dragonfly:learning_rate",    "learning rate for Qrouting", "0.5"},
-        {"learning_rate",     "learning rate for Qrouting", "0.5"},
-
-        {"dragonfly:pathToQtableFile",    "path to qtable file for loading", ""},
-        {"pathToQtableFile",     "path to qtable file for loading", ""},
-
-        {"dragonfly:save_qtable",    "save ?", "false"},
-        {"save_qtable",     "save?", "false"},
-
-        {"dragonfly:max_hops",    "maximum hops allowed for q", "6"},
-        {"max_hops",     "maximum hops allowed for q", "6"},
-
-        {"dragonfly:epsilon",    "probability for qrouting exploration instead of best", "0.1"},
-        {"epsilon",    "probability for qrouting exploration instead of best", "0.1"},
-
-        {"load_qtable",     "yes?", "false"},
-
-        // broadcasting q-table to neighbors
-        {"qtable_bcast",     "nobcast, perid, thld", "nobcast"}, 
-        {"qbcastThsld",    "bcast qtable by Threshold", "0.1"}, //0.0 -- 1.0
-        {"qbcastPerid",    "1000ns", "1000ns"},
-
-        // qtable num of rows: groups or all routers
-        {"qtable_row_type",     "g or r or n or destG_srcN", "g"}, 
-        {"learning_rate2",     "learning rate beta for hysteretic q-learning for Qrouting", "learning_rate"},
-        {"src_group_q",     "only use q-routing in src group", "false"},
-        {"src_mid_group_q",     "Only the first router in the source group or in the first mid group do q-routing. src_group_q and src_mid_q can not be true at the same time. max_hops became irrelevant", "false"},
-        {"save_qtable_time",    "when to save qtable (us)", "1000us"},
-        {"prid_func",     "yes?", "false"},
-        {"q_threshold1",    "Threshold for q-routing. If (min_path_est - min_est) / min_path_est < threshold, min_path will be selected", "0.0"},
-        {"q_threshold2",    "if src_mid_group_q is enabled, this threshold is used for intermediate group, in group qrouting. if src_mid_group_q is not enabled, this params has no effect", "0.0"},
+        {"config_failed_links",   "Controls whether or not failed links are considered","False"},
+        {"failed_links",          "List of global links to mark as failed.  Only needs to be passed to router 0. Format is \"group1:group2:slice\"",""},
     )
 
-    /****************************************************************
-    q-adaptive  == q-adaptive-routing-1
-    
-    q-adaptive2 == q-adaptive-routing-2 // under development
-
-    q2 adopts the idea of near-end delivery time (from current router to neighbor router) and far-end
-    delivery time (from neighbor to dest GROUP). 
-    Estimation used for routing is the sum of the two.
-    in this case, near-end table is updated by replacemnt with new value
-    far-end table is updated with a learning rate without immediate reward
-    ************************************************************************/
-
-
-    /* Assumed connectivity of each router:
-     * ports [0, p-1]:      Hosts
-     * ports [p, p+a-2]:    Intra-group
-     * ports [p+a-1, k-1]:  Inter-group
-     */
-
-    struct dgnflyParams {
-        uint32_t p;  /* # of hosts / router */
-        uint32_t a;  /* # of routers / group */
-        uint32_t k;  /* Router Radix */
-        uint32_t h;  /* # of ports / router to connect to other groups */
-        uint32_t g;  /* # of Groups */
-        uint32_t n;  /* # of links between groups in a pair */
-    };
-
     enum RouteAlgo {
-        MINIMAL = 0,
+        MINIMAL,
         VALIANT,
         ADAPTIVE_LOCAL,
-        Q1,
-        Q2,
-        PAR,
-        UGAL_3VC,
-        UGAL_4VC,
-    };
-
-    enum QBcastType {
-        NOBCAST = 0,   // this may trigger exploration is set
-        PERID,      // periodic bcasting => only works with q1
-        THLD,       // threshold bcasting => only works with q2
+        UGAL,
+        MIN_A
     };
 
     RouteToGroup group_to_global_port;
 
+
     struct dgnflyParams params;
     double adaptive_threshold;
     uint32_t group_id;
-    uint32_t router_id; 
-    
-    //global rtr id
-    uint32_t router_id_global; 
+    // Router id within group
+    uint32_t router_id;
+
+    // Actual id of router
+    uint32_t rtr_id;
 
     RNG::SSTRandom* rng;
 
-    int const* output_credits;       
+    int const* output_credits;
     int const* output_queue_lengths;
-
-    //credit of output port track remote router input port free slot number
-    int const* output_2nbr_credits; 
-    int const* output_used_credits;
-
     int num_vcs;
     int num_vns;
 
-    enum global_route_mode_t { ABSOLUTE, RELATIVE };
     global_route_mode_t global_route_mode;
-
-    int64_t link_latency_global;
-    int64_t link_latency_local;
-    float learning_rate;    //alpha 
-    float learning_rate2;   //beta
-    float epsilon;
-    bool save_qtable;
-    int save_qtable_time;
-
-    std::string qtablefile;
-    std::string pathToQtableFile;
-    std::string qtableFileDir="qtables/";
-    int max_hops;
-    Output out2file; //for io q-table
-    int64_t* qtable;
-    int64_t* t2nbrTable;
-    std::string qtable_row_type;
-    int qtable_rows;
-
-    int t2nbrTable_size;
-    bool load_qtable;
-    QBcastType qtable_bcast;
-    float qbcastThsld;
-
-    Router* parent;
-    std::vector<int64_t> qBcastTable; // this table stores the min est time from current router to dest group. Used for qvalue broadcasting
-
-    int qbcastPerid;
-    std::vector<int64_t> tFromNbrTable; 
-
-    int bcast_itr; // used by perid bcast, record current bcasat iteration
-
-    std::string outfile;
-
-    bool src_group_q; 
-    bool src_mid_group_q; 
-
-    std::vector<int> global_port_idx; 
-
-    double q_threshold1;
-    double q_threshold2;
-
-    bool prid_func;
 
 public:
     struct dgnflyAddr {
@@ -259,17 +245,16 @@ public:
         uint32_t mid_group_shadow;
         uint32_t router;
         uint32_t host;
-
-        uint32_t router_global;
-        uint32_t mid_router; //relative to group
     };
 
     topo_dragonfly(ComponentId_t cid, Params& p, int num_ports, int rtr_id, int num_vns);
     ~topo_dragonfly();
 
     virtual void route_packet(int port, int vc, internal_router_event* ev);
-
     virtual internal_router_event* process_input(RtrEvent* ev);
+
+    virtual std::pair<int,int> getDeliveryPortForEndpointID(int ep_id);
+    virtual int routeControlPacket(CtrlRtrEvent* ev);
 
     virtual PortState getPortState(int port) const;
     virtual std::string getPortLogicalGroup(int port) const;
@@ -283,32 +268,27 @@ public:
         }
     }
 
-    virtual int computeNumVCs(int vns) { return vns * 3; }
     virtual int getEndpointID(int port);
+
     virtual void setOutputBufferCreditArray(int const* array, int vcs);
     virtual void setOutputQueueLengthsArray(int const* array, int vcs);
 
-    virtual void setOutput2NbrCreditArray(int const* array, int vcs);
-    virtual void setOutputUsedCreditArray(int const* array, int vcs);
-    virtual void setQtable();
-    virtual qtable_event* create_qtable_event(internal_router_event* ev, int port_number, bool bcast);
-    virtual void updateQtable(qtable_event* qe, int port);
-    virtual void updateWholeQtable(qBcast_event* qe, int port);
-    virtual void set_t2nbrTable();
-    virtual void set_tFromNbrTable();
-    virtual void set_parent(Router* router);
-    virtual void set_qBcastTable(); 
-    virtual void update_tFromNbrTable(int port, internal_router_event* ev);
-    
 private:
     void idToLocation(int id, dgnflyAddr *location);
-    uint32_t router_to_group(uint32_t group);
-    uint32_t port_for_router(uint32_t router);
-    uint32_t port_for_group(uint32_t group, uint32_t global_slice, int id = -1);
+    int32_t router_to_group(uint32_t group);
+    int32_t port_for_router(uint32_t router);
+    int32_t port_for_group(uint32_t group, uint32_t global_slice, int id = -1);
+    int32_t port_for_group_init(uint32_t group, uint32_t global_slice);
+    int32_t hops_to_router(uint32_t group, uint32_t router, uint32_t slice);
+
+    inline bool is_port_endpoint(uint32_t port) const { return ( port < params.p ); }
+    inline bool is_port_local_group(uint32_t port) const { return (port >= params.p && port < (params.p + params.a -1 )); }
+    inline bool is_port_global(uint32_t port) const { return ( port >= params.p + params.a - 1 ); }
 
     struct vn_info {
         int start_vc;
         int num_vcs;
+        int bias;
         RouteAlgo algorithm;
     };
 
@@ -316,45 +296,13 @@ private:
 
     void route_nonadaptive(int port, int vc, internal_router_event* ev);
     void route_adaptive_local(int port, int vc, internal_router_event* ev);
+    void route_ugal(int port, int vc, internal_router_event* ev);
+    void route_mina(int port, int vc, internal_router_event* ev);
 
-    int choose_port_for_group(topo_dragonfly_event* td_ev, int dest_g);
 
-    std::pair<int,int> adp_select_port(topo_dragonfly_event *td_ev, int port, int vc_start, int vc_end, std::vector<int> vc_min, std::vector<int> vc_nonmin, std::string debuginfo="debugMsg");
-
-    void route_ugal_3vc(int port, int vc, internal_router_event* ev);
-    void route_ugal_4vc(int port, int vc, internal_router_event* ev);
-    void route_minimal(int port, int vc, internal_router_event* ev);
-    void route_valiant(int port, int vc, internal_router_event* ev);
-    void route_PAR(int port, int vc, internal_router_event* ev);
-    void q_adaptive(int port, int vc, internal_router_event* ev);
-    uint32_t idToGroup(int id); 
-    uint32_t idToRouter(int id); 
-
-    int qtable_get_min_port(int port, int row_idx, RouteAlgo ralg, uint32_t port_start, uint32_t port_end);
-    int64_t qtable_get_est(int port, int row_idx, RouteAlgo ralg);
-    void dumpQtable();
-    void save_qtable_toFile();
-
-    int useQrouting; // 0(not q routing), 1, 2
-    void dump_t2nbrTable();
-    void dump_tFromNbrTable();
-    int qtable_get_row_idx(topo_dragonfly_event *td_ev);
-    void do_thld_qBcast(topo_dragonfly_event *td_ev);
-    void update_qBcastTable(topo_dragonfly_event *td_ev);
-
-    Clock::Handler<topo_dragonfly>* qPeridClock_handler; //qtable periodic update clock
-    TimeConverter* qPerid_tc;
-    UnitAlgebra bcast_clock;
-
-    bool perid_qBcast_handler(Cycle_t cycle);
-    void route_static(int port, int vc, internal_router_event* ev);
-    int get_port_remote_group_id(int outport);
-
-    Clock::Handler<topo_dragonfly>* peridClock_handler; //qtable periodic update clock
-    TimeConverter* perid_tc;
-
-    bool perid_funct_handler(Cycle_t cycle);
 };
+
+
 
 
 class topo_dragonfly_event : public internal_router_event {
@@ -384,8 +332,6 @@ public:
         ser & dest.mid_group_shadow;
         ser & dest.router;
         ser & dest.host;
-        ser & dest.router_global; 
-        ser & dest.mid_router;
         ser & global_slice;
         ser & global_slice_shadow;
     }

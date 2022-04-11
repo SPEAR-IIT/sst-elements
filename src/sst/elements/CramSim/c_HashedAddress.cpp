@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -28,6 +28,8 @@
 // limitations under the License.
 #include <sst_config.h>
 
+#include <sst/core/simulation.h>
+
 #include "c_HashedAddress.hpp"
 
 using namespace std;
@@ -40,10 +42,7 @@ using namespace std;
 //}
 
 void c_HashedAddress::print() const {
-  std::cout << "Channel: " << m_channel << " PseudoChannel: "<<m_pchannel<<" Rank: " << m_rank
-	    << " BankGroup: " << m_bankgroup << " Bank: " << m_bank
-	    << " Row: " << m_row << " Col: " << m_col
-	    << " Cacheline: " << m_cacheline
-	    << "\tBankId: " << m_bankId
-	    << std::endl;
+    SST::Simulation::getSimulation()->getSimulationOutput().output(
+        "Channel: %u PseudoChannel: %u Rank: %u BankGroup: %u Bank: %u Row: %u Col: %u Cacheline: %u\tBankId: %u\n",
+        m_channel, m_pchannel, m_rank, m_bankgroup, m_bank, m_row, m_col, m_cacheline, m_bankId);
 }

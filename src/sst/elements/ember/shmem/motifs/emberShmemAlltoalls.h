@@ -1,8 +1,8 @@
-// Copyright 2009-2020 NTESS. Under the terms
+// Copyright 2009-2021 NTESS. Under the terms
 // of Contract DE-NA0003525 with NTESS, the U.S.
 // Government retains certain rights in this software.
 //
-// Copyright (c) 2009-2020, NTESS
+// Copyright (c) 2009-2021, NTESS
 // All rights reserved.
 //
 // Portions are copyright of other developers:
@@ -155,6 +155,10 @@ public:
     )
 
     SST_ELI_DOCUMENT_PARAMS(
+        {   "args.nelems","Sets number of data items", "1"},
+        {   "args.dst","Sets stride between consecutive elements of the dest data object", "1"},
+        {   "args.sst","Sets stride between consecutive elements of the source data object", "1"},
+        {   "args.printResults","", "false"},
     )
 
 public:
