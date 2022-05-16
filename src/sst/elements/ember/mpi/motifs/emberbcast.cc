@@ -33,6 +33,8 @@ EmberBcastGenerator::EmberBcastGenerator(SST::ComponentId_t id,
 
 bool EmberBcastGenerator::generate( std::queue<EmberEvent*>& evQ) {
 
+    // output(" %s: ranks %d, loop %d \n", getMotifName().c_str(), rank(), m_loopIndex );
+
     if ( m_loopIndex == m_iterations ) {
 printf("%s\n",__func__);
         int typeSize = sizeofDataType(DOUBLE);

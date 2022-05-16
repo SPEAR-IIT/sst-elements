@@ -178,6 +178,8 @@ libember_la_SOURCES = \
 	mpi/motifs/emberNtoM.cc \
 	mpi/motifs/emberstencilNd.h \
 	mpi/motifs/emberstencilNd.cc \
+	mpi/motifs/emberlulesh.h \
+	mpi/motifs/emberlulesh.cc \
 	libs/emberShmemLib.h \
 	libs/shmem/emberFamEvent.h \
 	libs/shmem/emberFamAddEv.h \
